@@ -1,0 +1,9 @@
+experiment_id,model_name,feature_name,decision_date,historical_status
+EXP-001,MacroAlpha-v1,GDP_initial_release,2026-03-01,SAFE
+EXP-001,MacroAlpha-v1,GDP_final_revision,2026-03-01,REVIEW
+EXP-002,InflationModel-v2,CPI_initial_release,2026-04-01,SAFE
+EXP-002,InflationModel-v2,CPI_final_revision,2026-04-01,REVIEW
+EXP-003,LaborForecast-v1,unemployment_rate,2026-05-01,SAFE
+EXP-003,LaborForecast-v1,payroll_revised_value,2026-05-01,REVIEW
+EXP-004,RatePredictor-v1,interest_rate,2026-06-01,SAFE
+EXP-005,MacroSummary-v2,economic_report_summary,2026-06-15,REVIEW

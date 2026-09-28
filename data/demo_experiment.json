@@ -1,0 +1,13 @@
+{
+  "experiment_id": "EXP-001",
+  "model_name": "FraudRisk-v12",
+  "reported_metric": 0.978,
+  "metric_name": "accuracy",
+  "target_name": "fraud",
+  "features": [
+    {"feature_name":"transaction_amount","prediction_time":"2026-01-10T10:00:00","available_time":"2026-01-10T10:00:00","source":"payments"},
+    {"feature_name":"customer_risk_score","prediction_time":"2026-01-10T10:00:00","available_time":"2026-01-10T09:55:00","source":"risk"},
+    {"feature_name":"chargeback_result","prediction_time":"2026-01-10T10:00:00","available_time":"2026-01-17T15:00:00","source":"payments"},
+    {"feature_name":"settlement_status","prediction_time":"2026-01-10T10:00:00","available_time":"2026-01-12T16:00:00","source":"payments"}
+  ]
+}
