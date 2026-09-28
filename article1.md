@@ -150,8 +150,9 @@ The branches are the important part:
 - **Memory never overrules the clock:** if the timestamps prove a feature was available in time, memory is
   shown as context and adds nothing.
 
-I learned that last rule the hard way. An early version happily raised the risk of `customer_risk_score`
-because it "looked like" `merchant_risk_score`. Similar names are a reason to look, not proof.
+I learned why that rule matters while tuning the vectors. An early version rated `customer_risk_score` 0.58
+similar to `merchant_risk_score`, above the match threshold, just because both end in "risk score". Similar
+names are a reason to look, not proof.
 
 ## Before and after
 
