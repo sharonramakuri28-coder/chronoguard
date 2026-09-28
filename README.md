@@ -1,4 +1,4 @@
-# ChronoGuard V2 🛡️⏳
+# ChronoGuard 🛡️⏳
 
 **Know What Was Knowable.**
 
