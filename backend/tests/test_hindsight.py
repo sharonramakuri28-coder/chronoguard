@@ -38,16 +38,25 @@ def make_fake(retain_error=None, recall_error=None, probe_error=None, probe_dela
     class FakeHindsight:
         created: list[dict] = []
         calls: list[tuple] = []
+        retain_kwargs: list[dict] = []
         closed = 0
 
         def __init__(self, base_url, api_key=None, timeout=300.0):
             FakeHindsight.created.append({"base_url": base_url, "api_key": api_key, "timeout": timeout})
 
-        def retain(self, bank_id, content, context=None):
+        def retain(self, bank_id, content, context=None, **kwargs):
             no_running_loop()
             FakeHindsight.calls.append(("retain", bank_id, content))
+            FakeHindsight.retain_kwargs.append(kwargs)
             if retain_error:
                 raise retain_error
+
+        def reflect(self, bank_id, query, **kwargs):
+            no_running_loop()
+            FakeHindsight.calls.append(("reflect", bank_id, query))
+            if recall_error:
+                raise recall_error
+            return SimpleNamespace(text=f"Reflection: {RECALLED}")
 
         def recall(self, bank_id, query):
             no_running_loop()
@@ -110,7 +119,12 @@ def test_retain_success_marks_incidents_and_uses_timeout(client, enable_hindsigh
 
     retained = [c for c in fake.calls if c[0] == "retain"]
     assert len(retained) == len(audit["leaked_features"])
-    assert all(c[2].startswith(f"In {name}") for c in retained)  # the lesson text is what gets retained
+    # A structured incident record: cause, timeline evidence, fix and lesson, upserted per incident.
+    assert all(c[2].startswith("ChronoGuard incident: Temporal leakage") for c in retained)
+    assert all(f"(dataset {name})" in c[2] and "\nFix: " in c[2] and "\nLesson: " in c[2] for c in retained)
+    kwargs = fake.retain_kwargs
+    assert all(k["update_mode"] == "replace" and k["document_id"].startswith("chronoguard-incident-") for k in kwargs)
+    assert all(k["metadata"]["dataset"] == name and "temporal-leakage" in k["tags"] for k in kwargs)
     assert all(inst["timeout"] == get_settings().hindsight_timeout_seconds for inst in fake.created)
 
     incidents = [i for i in client.get("/api/memory/incidents").json() if i["dataset_name"] == name]
@@ -210,3 +224,22 @@ def test_failure_backs_off_instead_of_retrying_every_call(client, enable_hindsig
     recalls = sum(c[0] == "recall" for c in fake.calls)
     assert client.post("/api/memory/search", json={"query": "chargeback"}).json()["hindsight"] == []
     assert sum(c[0] == "recall" for c in fake.calls) == recalls  # skipped during the backoff window
+
+
+def test_feedback_re_retains_and_chat_reflects(client, enable_hindsight):
+    fake = enable_hindsight(make_fake())
+    audit = _upload(client, "fraud_detection_q1.csv", f"hs_learn_{uuid.uuid4().hex[:6]}.csv")
+    first = [k["document_id"] for k in fake.retain_kwargs]
+
+    r = client.post(f"/api/audits/{audit['id']}/feedback", json={"successful": False, "note": "still leaking"})
+    assert r.status_code == 200 and r.json()["hindsight_synced"] >= len(audit["leaked_features"])
+    replaced = [k for k in fake.retain_kwargs[len(first) :] if k["document_id"] in first]
+    assert replaced and all(k["metadata"]["fix_rejections"] == "1" for k in replaced)  # same documents, updated
+    assert any("rejected 1 time(s)" in c[2] for c in fake.calls if c[0] == "retain")
+
+    chat = client.post("/api/chat", json={"message": "Have we seen this before?", "audit_id": audit["id"]}).json()
+    assert chat["provider"] == "hindsight-reflect" and "Hindsight reflection" in chat["answer"]
+    assert any(c[0] == "reflect" for c in fake.calls)
+    assert (
+        client.post("/api/hindsight/reflect", json={"query": "chargebacks"}).json()["answer"].startswith("Reflection")
+    )

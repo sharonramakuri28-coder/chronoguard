@@ -8,11 +8,13 @@ otherwise (or if a call fails) the local hashed vectors are used.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from engine.risk_scoring import MemoryEvidence
+from memory import incidents
 from memory.embeddings import AzureEmbedder, cosine, local_embed
 from memory.explainer import lesson_text
 from memory.hindsight_adapter import HindsightAdapter
@@ -83,10 +85,41 @@ class MemoryStore:
         return provider, matches
 
     # ---------------------------------------------------------------- record
-    def record(self, audit_id: int, dataset_name: str, audit: dict) -> list[Incident]:
+    def incidents_by_id(self, ids) -> dict[int, Incident]:
+        ids = list(set(ids))
+        if not ids:
+            return {}
+        return {i.id: i for i in self.db.scalars(select(Incident).where(Incident.id.in_(ids)))}
+
+    def sync_hindsight(self, inc: Incident) -> bool:
+        """Retain (or replace) the incident's full record in Hindsight. False when unavailable."""
+        inc.hindsight_document_id = inc.hindsight_document_id or incidents.document_id(inc.dataset_name, inc.feature)
+        ok = self.hindsight.retain(
+            incidents.hindsight_content(inc),
+            context=f"ChronoGuard {inc.incident_type or incidents.INCIDENT_TYPE} incident",
+            document_id=inc.hindsight_document_id,
+            metadata=incidents.hindsight_metadata(inc),
+            tags=incidents.hindsight_tags(inc),
+        )
+        inc.hindsight_retained = ok or bool(inc.hindsight_retained)
+        return ok
+
+    def record(
+        self,
+        audit_id: int,
+        dataset_name: str,
+        audit: dict,
+        model_name: str | None = None,
+        matches: dict[str, MemoryEvidence] | None = None,
+    ) -> list[Incident]:
         """Remember each leaked feature. Re-auditing the same dataset updates its incidents."""
+        matches = matches or {}
         leaked = [f for f in audit["feature_results"] if f["status"] == "leaked"]
+        # Count how often remembered incidents were recalled for this dataset.
+        for inc in self.incidents_by_id(m.incident_id for m in matches.values()).values():
+            inc.times_recalled = (inc.times_recalled or 0) + 1
         if not leaked:
+            self.db.flush()
             return []
         existing = {
             i.feature: i for i in self.db.scalars(select(Incident).where(Incident.dataset_name == dataset_name))
@@ -105,9 +138,20 @@ class MemoryStore:
             inc.lesson_provider = "template"
             inc.local_embedding = local[idx]
             inc.azure_embedding = azure[idx] if azure else inc.azure_embedding
-            if not inc.hindsight_retained:
-                inc.hindsight_retained = self.hindsight.retain(inc.lesson)
+            inc.incident_type = incidents.INCIDENT_TYPE
+            inc.model_name = model_name or inc.model_name
+            inc.cause = incidents.cause_text(f)
+            inc.evidence = incidents.evidence(f)
+            inc.solution = incidents.solution_text(f)
+            if f["feature"] in matches:
+                inc.recurrence_of = matches[f["feature"]].incident_id
+            inc.fix_confirmations = inc.fix_confirmations or 0
+            inc.fix_rejections = inc.fix_rejections or 0
+            inc.times_recalled = inc.times_recalled or 0
+            inc.updated_at = datetime.now(UTC)
             self.db.add(inc)
+            self.db.flush()
+            self.sync_hindsight(inc)
             out.append(inc)
         self.db.flush()
         return out
