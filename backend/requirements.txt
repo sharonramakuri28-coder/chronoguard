@@ -10,3 +10,5 @@ numpy==2.4.6
 scikit-learn==1.9.1
 # Optional: Azure OpenAI embeddings + explanations (only used when configured)
 openai==3.19.2
+# Optional: Hindsight long-term memory (only used when CHRONOGUARD_HINDSIGHT_* is set)
+hindsight-client==0.10.1
