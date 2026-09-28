@@ -1,1 +1,0 @@
-UPDATE public.experiments SET model = 'Macro forecasting strategy · 200 historical decisions · 4 revision-sensitive indicators · 468 revision snapshots · atlas_decisions.csv' WHERE slug = 'macroalpha-v4';

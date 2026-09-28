@@ -1,0 +1,24 @@
+# Env
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+backend/chronoguard.db
+backend/storage/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.log
