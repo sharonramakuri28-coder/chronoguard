@@ -244,14 +244,18 @@ def record_feedback(db: Session, audit: Audit, successful: bool, note: str | Non
             inc.fix_confirmations = (inc.fix_confirmations or 0) + 1
         else:
             inc.fix_rejections = (inc.fix_rejections or 0) + 1
-    audit.feedback = {"successful": successful, "note": (note or "").strip() or None, "at": inc_mod.now_iso()}
-
     store = MemoryStore(db)
     try:
-        for inc in affected:
-            store.sync_hindsight(inc)
+        synced = sum(1 for inc in affected if store.sync_hindsight(inc))
     finally:
         store.close()
+    audit.feedback = {
+        "successful": successful,
+        "note": (note or "").strip() or None,
+        "at": inc_mod.now_iso(),
+        "incidents_updated": len(affected),
+        "hindsight_synced": synced,
+    }
     db.commit()
     return affected
 

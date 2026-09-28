@@ -73,6 +73,8 @@ def test_feedback_is_learned_and_changing_it_does_not_double_count(client, story
     assert len(own) == len(v1["leaked_features"])
     recalled = {m["incident_id"] for m in v1["memory_recall"]}
     assert {i["id"] for i in fb["updated_incidents"]} == {i["id"] for i in own} | recalled
+    stored = client.get(f"/api/audits/{v1['id']}").json()["feedback"]  # counts persist with the answer
+    assert stored["incidents_updated"] == len(fb["updated_incidents"]) and stored["hindsight_synced"] == 0
     assert all(i["fix_confirmations"] >= 1 and i["fix_confidence"] > 0.5 for i in own)
 
     again = client.post(f"/api/audits/{v1['id']}/feedback", json={"successful": True}).json()

@@ -112,6 +112,8 @@ export interface Feedback {
   successful: boolean
   note: string | null
   at: string
+  incidents_updated: number | null
+  hindsight_synced: number | null
 }
 
 export interface AuditSummary {

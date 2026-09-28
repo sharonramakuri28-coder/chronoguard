@@ -118,6 +118,8 @@ class Feedback(BaseModel):
     successful: bool
     note: str | None
     at: str
+    incidents_updated: int | None = None  # absent on feedback stored before these counts existed
+    hindsight_synced: int | None = None
 
 
 class AuditSummary(BaseModel):

@@ -56,5 +56,5 @@ def submit_feedback(audit_id: int, body: schemas.FeedbackIn, db: Session = Depen
         audit_id=audit.id,
         feedback=audit.feedback,
         updated_incidents=[ser.incident_out(i) for i in updated],
-        hindsight_synced=sum(1 for i in updated if i.hindsight_retained),
+        hindsight_synced=audit.feedback["hindsight_synced"],
     )

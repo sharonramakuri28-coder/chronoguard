@@ -148,7 +148,6 @@ export function FeedbackPrompt({ audit }: { audit: AuditOut }) {
   const [note, setNote] = useState('')
   const [editing, setEditing] = useState(false)
   const current = audit.feedback
-  const result = fb.data
 
   if (!audit.leaked_features.length) return null
 
@@ -162,9 +161,9 @@ export function FeedbackPrompt({ audit }: { audit: AuditOut }) {
         </p>
         {current.note && <p className="mt-1 text-sm text-slate-300">“{current.note}”</p>}
         <p className="mt-2 text-xs text-muted">
-          {result
-            ? `Stored on ${result.updated_incidents.length} incident${result.updated_incidents.length === 1 ? '' : 's'}${
-                result.hindsight_synced ? `, ${result.hindsight_synced} re-retained in Hindsight` : ''
+          {current.incidents_updated
+            ? `Stored on ${current.incidents_updated} incident${current.incidents_updated === 1 ? '' : 's'}${
+                current.hindsight_synced ? `, ${current.hindsight_synced} re-retained in Hindsight` : ''
               }. `
             : ''}
           Future recalls of these incidents carry this feedback.
