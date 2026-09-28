@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Compass } from 'lucide-react'
 import { lazy } from 'react'
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
+import { isTransientStatus } from './api/client'
 import { Layout } from './components/Layout'
 import { EmptyState } from './components/ui'
 
@@ -12,7 +13,16 @@ const ReplayRoute = lazy(() => import('./pages/Replay').then((m) => ({ default: 
 const Memory = lazy(() => import('./pages/Memory').then((m) => ({ default: m.Memory })))
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false, staleTime: 10_000 } },
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 10_000,
+      // Network and gateway errors are retried so a sleeping free-tier backend can wake up;
+      // HTTP errors such as 404 are real answers and are not retried.
+      retry: (count, err) => isTransientStatus((err as { status?: number }).status) && count < 6,
+      retryDelay: (attempt) => Math.min(2_000 * 2 ** attempt, 15_000),
+    },
+  },
 })
 
 function NotFound() {

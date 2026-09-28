@@ -1,13 +1,19 @@
 import { motion } from 'framer-motion'
-import { ArrowRight, Brain, Database, FileSpreadsheet, FlaskConical, Loader2, ShieldAlert, Sparkles, Users } from 'lucide-react'
+import { ArrowRight, Brain, Database, Download, FileSpreadsheet, FlaskConical, Loader2, Play, ShieldAlert, Sparkles, Users } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
+import { api } from '../api/client'
 import { AnimatedNumber } from '../components/AnimatedNumber'
 import { RiskByAudit } from '../components/charts'
+import { GettingStarted } from '../components/GettingStarted'
 import { RiskGauge } from '../components/RiskGauge'
 import { UploadDropzone } from '../components/UploadDropzone'
 import { BandBadge, ErrorState, GlassCard, PageHeader, PageSkeleton, SectionTitle, StatTile } from '../components/ui'
 import { useAuditSample, useDashboard, useSamples, useUpload } from '../hooks/useApi'
 import { fmtBytes, fmtDate, fmtDelta, fmtInt } from '../lib/format'
+
+// The demo sample tells the full story: leaks found by timestamps, and a renamed column
+// recognised from memory of the earlier fraud dataset (seeded on first start).
+const DEMO_SAMPLE = 'fraud_detection_q2_wide.csv'
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -35,7 +41,25 @@ export function Dashboard() {
           </>
         }
         subtitle="ChronoGuard checks every feature value against the moment each prediction was made, scores the risk, recalls similar past incidents, and replays the model without the leak to measure the real impact."
+        actions={
+          samples.data?.some((s) => s.name === DEMO_SAMPLE) && (
+            <button
+              className="btn btn-primary"
+              disabled={busy}
+              onClick={() => sample.mutate(DEMO_SAMPLE, { onSuccess: (a) => onAudited(a.id) })}
+            >
+              {sample.isPending && sample.variables === DEMO_SAMPLE ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+              ) : (
+                <Play className="size-4" aria-hidden />
+              )}
+              Try the demo
+            </button>
+          )
+        }
       />
+
+      <GettingStarted />
 
       <div className="grid gap-4 lg:grid-cols-5">
         <GlassCard className="lg:col-span-3">
@@ -48,28 +72,45 @@ export function Dashboard() {
           )}
           {samples.data && samples.data.length > 0 && (
             <div className="mt-5">
-              <p className="label mb-2">Or run a bundled sample (synthetic data)</p>
+              <p className="label mb-2">Or run a bundled sample (synthetic data), or download one to upload yourself</p>
               <div className="grid gap-2 sm:grid-cols-3">
                 {samples.data.map((s) => (
-                  <button
+                  <div
                     key={s.name}
-                    disabled={busy}
-                    onClick={() => sample.mutate(s.name, { onSuccess: (a) => onAudited(a.id) })}
-                    className="group flex flex-col items-start gap-1 rounded-xl border border-line bg-white/[0.02] p-3 text-left transition hover:border-accent/40 hover:bg-accent/[0.04] disabled:opacity-50"
+                    className="flex flex-col overflow-hidden rounded-xl border border-line bg-white/[0.02] transition hover:border-accent/40"
                   >
-                    <span className="flex w-full items-center justify-between gap-2 text-sm font-semibold text-white">
-                      <span className="flex items-center gap-1.5">
-                        <FileSpreadsheet className="size-3.5 text-accent" aria-hidden /> {s.title}
+                    <button
+                      disabled={busy}
+                      onClick={() => sample.mutate(s.name, { onSuccess: (a) => onAudited(a.id) })}
+                      className="group flex flex-1 flex-col items-start gap-1 p-3 text-left transition hover:bg-accent/[0.04] disabled:opacity-50"
+                    >
+                      <span className="flex w-full items-center justify-between gap-2 text-sm font-semibold text-white">
+                        <span className="flex items-center gap-1.5">
+                          <FileSpreadsheet className="size-3.5 shrink-0 text-accent" aria-hidden /> {s.title}
+                        </span>
+                        {sample.isPending && sample.variables === s.name ? (
+                          <Loader2 className="size-3.5 shrink-0 animate-spin text-accent" aria-hidden />
+                        ) : (
+                          <ArrowRight
+                            className="size-3.5 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-accent"
+                            aria-hidden
+                          />
+                        )}
                       </span>
-                      {sample.isPending && sample.variables === s.name ? (
-                        <Loader2 className="size-3.5 animate-spin text-accent" aria-hidden />
-                      ) : (
-                        <ArrowRight className="size-3.5 text-muted transition group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden />
-                      )}
-                    </span>
-                    <span className="text-xs text-muted">{s.description}</span>
-                    <span className="text-[10px] text-muted">{fmtBytes(s.size_bytes)}</span>
-                  </button>
+                      <span className="text-xs text-muted">{s.description}</span>
+                    </button>
+                    <div className="flex items-center justify-between border-t border-line px-3 py-2 text-[11px] text-muted">
+                      <span>{fmtBytes(s.size_bytes)}</span>
+                      <a
+                        href={api.sampleDownloadUrl(s.name)}
+                        download={s.name}
+                        className="inline-flex items-center gap-1 hover:text-accent"
+                        aria-label={`Download ${s.name}`}
+                      >
+                        <Download className="size-3" aria-hidden /> Download CSV
+                      </a>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -153,7 +194,7 @@ export function Dashboard() {
                   className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-line bg-white/[0.02] px-4 py-3 transition hover:border-accent/30 hover:bg-white/[0.04]"
                 >
                   <span className="num w-8 text-xs text-muted">#{a.id}</span>
-                  <span className="min-w-0 flex-1 truncate font-mono text-sm text-white">{a.dataset_name}</span>
+                  <span className="min-w-0 flex-1 basis-44 truncate font-mono text-sm text-white">{a.dataset_name}</span>
                   <span className="text-xs text-muted">
                     <Users className="mr-1 inline size-3" aria-hidden />
                     {fmtInt(a.decisions)}
