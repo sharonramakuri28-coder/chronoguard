@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 
-export const useHealth = () => useQuery({ queryKey: ['health'], queryFn: api.health, staleTime: 30_000, retry: 1 })
+export const useHealth = () => useQuery({ queryKey: ['health'], queryFn: api.health, staleTime: 30_000 })
 
 export const useDashboard = () => useQuery({ queryKey: ['dashboard'], queryFn: api.dashboard })
 
@@ -18,7 +18,6 @@ export const useReplay = (id: number | undefined) =>
     queryKey: ['replay', id],
     queryFn: () => api.replay(id!),
     enabled: id !== undefined,
-    retry: (count, err) => (err as { status?: number }).status !== 404 && count < 2,
   })
 
 export const useIncidents = () => useQuery({ queryKey: ['incidents'], queryFn: api.incidents })

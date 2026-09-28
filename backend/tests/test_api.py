@@ -72,6 +72,7 @@ def test_full_flow_upload_memory_replay(client):
     assert s["hits"][0]["incident"]["feature"] == "chargeback_filed"
 
     # 4. Replay measures the drop from removing leaked features.
+    assert client.get(f"/api/audits/{a1['id']}/replay").json() is None  # not run yet
     rep = client.post(f"/api/audits/{a1['id']}/replay").json()
     assert rep["status"] == "completed"
     assert rep["result"]["baseline"]["auc"] > rep["result"]["leak_free"]["auc"]
@@ -93,3 +94,12 @@ def test_replay_unavailable_without_labels(client):
     rep = client.post(f"/api/audits/{a['id']}/replay").json()
     assert rep["status"] == "unavailable"
     assert "target" in rep["message"]
+
+
+def test_sample_download(client):
+    r = client.get("/api/samples/credit_default_clean.csv/download")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/csv")
+    assert r.text.startswith("decision_id,feature_name")
+    assert client.get("/api/samples/../config.py/download").status_code == 404
+    assert client.get("/api/samples/nope.csv/download").status_code == 404

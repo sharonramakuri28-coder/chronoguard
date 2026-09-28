@@ -6,6 +6,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -87,6 +88,15 @@ def list_samples():
     ]
 
 
+@router.get("/samples/{name}/download")
+def download_sample(name: str):
+    """Serve a bundled sample CSV so judges can inspect it or upload it themselves."""
+    path = get_settings().samples_dir / name
+    if name not in SAMPLES or not path.exists():
+        raise HTTPException(404, "Unknown sample")
+    return FileResponse(path, media_type="text/csv", filename=name)
+
+
 @router.post("/samples/{name}/audit", response_model=schemas.AuditOut, status_code=201)
 def audit_sample(name: str, db: Session = Depends(get_db)):
     if name not in SAMPLES:
@@ -124,12 +134,11 @@ def run_replay(audit_id: int, db: Session = Depends(get_db)):
     return ser.replay_out(replay_audit(db, _get_audit(db, audit_id)))
 
 
-@router.get("/audits/{audit_id}/replay", response_model=schemas.ReplayOut)
+@router.get("/audits/{audit_id}/replay", response_model=schemas.ReplayOut | None)
 def get_replay(audit_id: int, db: Session = Depends(get_db)):
+    """Latest replay for the audit, or null if none has been run yet."""
     rep = ser.latest_replay(_get_audit(db, audit_id))
-    if not rep:
-        raise HTTPException(404, "No replay has been run for this audit yet.")
-    return ser.replay_out(rep)
+    return ser.replay_out(rep) if rep else None
 
 
 # ---------------------------------------------------------------- memory

@@ -60,8 +60,7 @@ function Replay({ id }: { id: number }) {
 
   if (audit.isLoading || replay.isLoading) return <PageSkeleton />
   if (audit.error) return <ErrorState error={audit.error} onRetry={() => audit.refetch()} />
-  const notRunYet = (replay.error as { status?: number } | null)?.status === 404
-  if (replay.error && !notRunYet) return <ErrorState error={replay.error} onRetry={() => replay.refetch()} />
+  if (replay.error) return <ErrorState error={replay.error} onRetry={() => replay.refetch()} />
 
   const a = audit.data!
   const rep = replay.data

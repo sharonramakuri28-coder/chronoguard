@@ -2,8 +2,10 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent
 
@@ -15,7 +17,10 @@ class Settings(BaseSettings):
     upload_dir: Path = BACKEND_DIR / "storage" / "uploads"
     samples_dir: Path = BACKEND_DIR / "data" / "samples"
     max_upload_mb: int = 20
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # Comma-separated list of allowed browser origins, e.g. "https://chronoguard.vercel.app".
+    # "*" (default) allows any origin: the API uses no cookies or credentials. In local
+    # development the Vite dev server proxies /api, so no CORS entry is needed.
+    cors_origins: Annotated[list[str], NoDecode] = ["*"]
     seed_samples_on_startup: bool = True
 
     # Optional Azure OpenAI (embeddings + explanations). Unset -> local fallback.
@@ -29,6 +34,18 @@ class Settings(BaseSettings):
     hindsight_base_url: str | None = None
     hindsight_api_key: str | None = None
     hindsight_bank_id: str = "chronoguard"
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):  # also accept a JSON list
+                import json
+
+                return json.loads(v)
+            return [o.strip().rstrip("/") for o in v.split(",") if o.strip()] or ["*"]
+        return v
 
 
 @lru_cache
