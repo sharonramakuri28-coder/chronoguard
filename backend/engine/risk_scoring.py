@@ -24,7 +24,7 @@ from engine.leakage_detector import AuditResult, FeatureLeakage
 MAX_SEVERITY_HOURS = 720.0
 MEMORY_BOOST = 15.0
 MEMORY_ONLY_CAP = 45.0
-MIN_SIMILARITY = 0.55
+MIN_SIMILARITY = 0.5
 
 FORMULA = (
     "feature = 100 × √(leak rate) × severity(median delay) + memory boost (≤15); "

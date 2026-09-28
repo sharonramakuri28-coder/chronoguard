@@ -15,12 +15,12 @@ import pandas as pd
 from engine.parsing import ParsedDataset
 
 DELAY_BUCKETS: list[tuple[str, float, float]] = [
-    ("Available in time", -np.inf, 0.0),
-    ("< 1 hour late", 0.0, 1.0),
-    ("1–24 hours late", 1.0, 24.0),
-    ("1–7 days late", 24.0, 168.0),
-    ("7–30 days late", 168.0, 720.0),
-    ("> 30 days late", 720.0, np.inf),
+    ("In time", -np.inf, 0.0),
+    ("<1 h", 0.0, 1.0),
+    ("1–24 h", 1.0, 24.0),
+    ("1–7 d", 24.0, 168.0),
+    ("7–30 d", 168.0, 720.0),
+    (">30 d", 720.0, np.inf),
 ]
 
 
