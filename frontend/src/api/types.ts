@@ -191,7 +191,9 @@ export interface HealthOut {
   database: string
   embedding_provider: string
   explanation_provider: string
+  /** disabled | package_missing | configured | connected | connection_failed */
   hindsight: string
+  hindsight_detail: string | null
 }
 
 export interface DashboardOut {

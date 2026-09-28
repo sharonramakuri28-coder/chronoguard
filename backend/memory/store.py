@@ -36,6 +36,9 @@ class MemoryStore:
         self.hindsight = hindsight or HindsightAdapter()
         self.provider = AZURE if self.azure.available else LOCAL
 
+    def close(self) -> None:
+        self.hindsight.close()
+
     # ---------------------------------------------------------------- search
     def _incidents(self, exclude_dataset: str | None = None) -> list[Incident]:
         q = select(Incident).order_by(Incident.created_at)

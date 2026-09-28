@@ -199,10 +199,14 @@ Single-page-app rewrites are included for Vercel (`vercel.json`), Netlify (`publ
 | Integration | Enables | Settings |
 |---|---|---|
 | Azure OpenAI | Semantic embeddings for memory; written explanations grounded in measured facts | `CHRONOGUARD_AZURE_OPENAI_*` |
-| Hindsight | Long-term organizational recall alongside the SQL incident store | `CHRONOGUARD_HINDSIGHT_*` + `pip install hindsight-client` |
+| Hindsight | Long-term organizational recall alongside the SQL incident store | `CHRONOGUARD_HINDSIGHT_BASE_URL` (e.g. `https://api.hindsight.vectorize.io`) + `CHRONOGUARD_HINDSIGHT_API_KEY` |
 | PostgreSQL | Durable, shared storage | `CHRONOGUARD_DATABASE_URL` + `pip install "psycopg[binary]"` |
 
-The active providers are shown in the app's sidebar and at `GET /api/health`.
+The active providers are shown in the app's sidebar and at `GET /api/health`. For Hindsight, health reports
+`disabled` (not configured), `package_missing`, `configured` (connection not checked yet), `connected` or
+`connection_failed`, with a reason in `hindsight_detail`. The check is a cached background probe (at most once
+a minute, 3 s timeout), so the health endpoint stays fast. Every Hindsight call is bounded by
+`CHRONOGUARD_HINDSIGHT_TIMEOUT_SECONDS` (default 10) and fails closed: audits and local memory keep working.
 
 ## Dataset format
 

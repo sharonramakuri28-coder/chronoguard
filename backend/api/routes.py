@@ -6,6 +6,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -17,7 +18,6 @@ from config import get_settings
 from database.session import get_db
 from engine.parsing import ParseError
 from memory.explainer import Explainer
-from memory.hindsight_adapter import HindsightAdapter
 from memory.store import THRESHOLDS, MemoryStore
 from models import schemas
 from models.tables import Audit, Dataset, Incident
@@ -41,13 +41,15 @@ def health(db: Session = Depends(get_db)):
     except Exception:  # pragma: no cover
         database = "error"
     store = MemoryStore(db)
-    hs = HindsightAdapter()
+    hindsight, hindsight_detail = store.hindsight.connection_status()
+    store.close()
     return schemas.HealthOut(
         status="ok" if database == "ok" else "degraded",
         database=database,
         embedding_provider=store.provider,
         explanation_provider=Explainer().provider,
-        hindsight="enabled" if hs.configured else ("error" if hs.error else "disabled"),
+        hindsight=hindsight,
+        hindsight_detail=hindsight_detail,
     )
 
 
@@ -70,7 +72,8 @@ async def upload_dataset(file: UploadFile = File(...), db: Session = Depends(get
     path = settings.upload_dir / f"{uuid.uuid4().hex[:12]}_{safe}"
     path.write_bytes(content)
     try:
-        audit = audit_file(db, path, name)
+        # Off the event loop: the audit is CPU-bound and the Hindsight client's sync calls need a plain thread.
+        audit = await run_in_threadpool(audit_file, db, path, name)
     except ParseError as exc:
         db.rollback()
         path.unlink(missing_ok=True)
@@ -154,6 +157,8 @@ def search_memory(req: schemas.SearchRequest, db: Session = Depends(get_db)):
         raise HTTPException(422, "Query is empty.")
     store = MemoryStore(db)
     provider, results = store.search([query])
+    recalled = store.hindsight.recall(f"Temporal leakage incidents related to {query}")
+    store.close()
     threshold = THRESHOLDS[provider]
     hits = results[0][: max(1, min(req.limit, 20))] if results else []
     db.commit()  # persist any lazily computed Azure vectors
@@ -167,7 +172,7 @@ def search_memory(req: schemas.SearchRequest, db: Session = Depends(get_db)):
             )
             for h in hits
         ],
-        hindsight=store.hindsight.recall(f"Temporal leakage incidents related to {query}"),
+        hindsight=recalled,
     )
 
 

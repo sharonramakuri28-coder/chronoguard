@@ -1,21 +1,11 @@
 """End-to-end API tests on a temporary SQLite database (no network, local memory provider)."""
 
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
-_tmp = tempfile.mkdtemp(prefix="chronoguard-test-")
-os.environ["CHRONOGUARD_DATABASE_URL"] = f"sqlite:///{Path(_tmp) / 'test.db'}"
-os.environ["CHRONOGUARD_UPLOAD_DIR"] = str(Path(_tmp) / "uploads")
-os.environ["CHRONOGUARD_SEED_SAMPLES_ON_STARTUP"] = "false"
-for key in ("AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "HINDSIGHT_BASE_URL", "HINDSIGHT_API_KEY"):
-    os.environ.pop(f"CHRONOGUARD_{key}", None)
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-from main import app  # noqa: E402
+from main import app  # test isolation (temporary DB, no external services) is set up in conftest.py
 
 SAMPLES = Path(__file__).resolve().parent.parent / "data" / "samples"
 

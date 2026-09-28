@@ -18,8 +18,13 @@ services:
         value: "*"
       - key: CHRONOGUARD_AZURE_OPENAI_API_KEY
         sync: false
+      # Hindsight is enabled only when both the base URL and the API key are set.
+      - key: CHRONOGUARD_HINDSIGHT_BASE_URL
+        value: https://api.hindsight.vectorize.io
       - key: CHRONOGUARD_HINDSIGHT_API_KEY
         sync: false
+      - key: CHRONOGUARD_HINDSIGHT_BANK_ID
+        value: chronoguard
 
   - type: web
     name: chronoguard-web
