@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     hindsight_base_url: str | None = None
     hindsight_api_key: str | None = None
     hindsight_bank_id: str = "chronoguard"
+    # Upper bound for each Hindsight call made during an audit (the client default is 300 s).
+    hindsight_timeout_seconds: float = 10.0
 
     @field_validator("cors_origins", mode="before")
     @classmethod

@@ -40,33 +40,37 @@ def audit_file(db: Session, path: Path, name: str, is_sample: bool = False) -> A
 
     result = detect_leakage(ds)
     store = MemoryStore(db)
-    provider, matches = store.match_features(ds.features, exclude_dataset=name)
-    risk = score_dataset(result, matches)
-    audit_dict, risk_dict = result.to_dict(), risk.to_dict()
-    explanation, explanation_provider = Explainer().explain(name, audit_dict, risk_dict)
+    try:
+        provider, matches = store.match_features(ds.features, exclude_dataset=name)
+        risk = score_dataset(result, matches)
+        audit_dict, risk_dict = result.to_dict(), risk.to_dict()
+        explanation, explanation_provider = Explainer().explain(name, audit_dict, risk_dict)
 
-    hindsight_context: list[str] = []
-    if store.hindsight.configured and result.leaked_features:
-        hindsight_context = store.hindsight.recall(
-            "Previous temporal leakage incidents involving features similar to: " + ", ".join(result.leaked_features)
+        hindsight_context: list[str] = []
+        if store.hindsight.configured and result.leaked_features:
+            hindsight_context = store.hindsight.recall(
+                "Previous temporal leakage incidents involving features similar to: "
+                + ", ".join(result.leaked_features)
+            )
+
+        audit = Audit(
+            dataset_id=dataset.id,
+            result=audit_dict,
+            risk=risk_dict,
+            risk_score=risk.score,
+            risk_band=risk.band,
+            memory_provider=provider,
+            explanation=explanation,
+            explanation_provider=explanation_provider,
+            hindsight_context=hindsight_context,
         )
+        db.add(audit)
+        db.flush()
 
-    audit = Audit(
-        dataset_id=dataset.id,
-        result=audit_dict,
-        risk=risk_dict,
-        risk_score=risk.score,
-        risk_band=risk.band,
-        memory_provider=provider,
-        explanation=explanation,
-        explanation_provider=explanation_provider,
-        hindsight_context=hindsight_context,
-    )
-    db.add(audit)
-    db.flush()
-
-    before = db.scalar(select(func.count(Incident.id)).where(Incident.dataset_name == name)) or 0
-    store.record(audit.id, name, audit_dict)
+        before = db.scalar(select(func.count(Incident.id)).where(Incident.dataset_name == name)) or 0
+        store.record(audit.id, name, audit_dict)
+    finally:
+        store.close()  # release the Hindsight HTTP session
     after = db.scalar(select(func.count(Incident.id)).where(Incident.dataset_name == name)) or 0
     audit.result = {**audit_dict, "new_incidents": after - before}
     db.commit()

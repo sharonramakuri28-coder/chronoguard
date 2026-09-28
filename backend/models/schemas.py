@@ -214,7 +214,9 @@ class HealthOut(BaseModel):
     database: str
     embedding_provider: str
     explanation_provider: str
+    # disabled | package_missing | configured | connected | connection_failed
     hindsight: str
+    hindsight_detail: str | None = None
 
 
 class DashboardOut(BaseModel):

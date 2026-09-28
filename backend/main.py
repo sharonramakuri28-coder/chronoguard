@@ -1,5 +1,6 @@
 """ChronoGuard API entry point. Run from backend/: `uvicorn main:app --reload`."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -15,12 +16,17 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 settings = get_settings()
 
 
+def _seed() -> None:
+    with SessionLocal() as db:
+        seed_samples(db)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     if settings.seed_samples_on_startup:
-        with SessionLocal() as db:
-            seed_samples(db)
+        # A worker thread, not the event loop: the Hindsight client's sync calls cannot run inside a running loop.
+        await asyncio.to_thread(_seed)
     yield
 
 

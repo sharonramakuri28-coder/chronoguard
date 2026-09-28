@@ -47,3 +47,12 @@ export const providerLabel = (p: string) =>
     'azure-openai': 'Azure OpenAI',
     template: 'Evidence template',
   })[p] ?? p
+
+export const hindsightLabel = (status: string) =>
+  ({
+    connected: 'Connected',
+    configured: 'Configured',
+    connection_failed: 'Connection failed',
+    package_missing: 'Package missing',
+    disabled: 'Disabled',
+  })[status] ?? status

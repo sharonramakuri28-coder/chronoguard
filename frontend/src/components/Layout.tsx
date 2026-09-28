@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Brain, FlaskConical, LayoutDashboard, Menu, ScanSearch, X } from 'lucide-react'
 import { Suspense, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { providerLabel } from '../lib/format'
+import { hindsightLabel, providerLabel } from '../lib/format'
 import { useHealth } from '../hooks/useApi'
 import { Logo } from './Logo'
 import { PageSkeleton } from './ui'
@@ -47,7 +47,9 @@ function SystemStatus() {
           </div>
           <div className="flex justify-between gap-2">
             <dt>Hindsight</dt>
-            <dd className="capitalize text-slate-300">{data.hindsight}</dd>
+            <dd className="text-right text-slate-300" title={data.hindsight_detail ?? undefined}>
+              {hindsightLabel(data.hindsight)}
+            </dd>
           </div>
         </dl>
       )}
