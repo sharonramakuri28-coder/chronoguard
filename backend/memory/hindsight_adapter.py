@@ -149,11 +149,26 @@ class HindsightAdapter:
         return CONFIGURED, "Connection check in progress."
 
     # ------------------------------------------------------------ memory calls
-    def retain(self, content: str, context: str = "ChronoGuard temporal leakage incident") -> bool:
+    def retain(
+        self,
+        content: str,
+        context: str = "ChronoGuard temporal leakage incident",
+        document_id: str | None = None,
+        metadata: dict[str, str] | None = None,
+        tags: list[str] | None = None,
+    ) -> bool:
+        """Store a memory. With a ``document_id`` the memory is replaced, not duplicated, on re-retain."""
         if not self.client or self._backing_off():
             return False
+        kwargs: dict = {}
+        if document_id:
+            kwargs.update(document_id=document_id, update_mode="replace")
+        if metadata:
+            kwargs["metadata"] = {k: str(v) for k, v in metadata.items() if v is not None}
+        if tags:
+            kwargs["tags"] = tags
         try:
-            self.client.retain(bank_id=self.bank_id, content=content, context=context)
+            self.client.retain(bank_id=self.bank_id, content=content, context=context, **kwargs)
             self._record(CONNECTED, None)
             return True
         except Exception as exc:
@@ -172,3 +187,17 @@ class HindsightAdapter:
             log.warning("Hindsight recall failed: %s", exc)
             self._record(CONNECTION_FAILED, _describe(exc))
             return []
+
+    def reflect(self, query: str) -> str | None:
+        """Ask Hindsight to reason over everything in the bank. None when unavailable."""
+        if not self.client or self._backing_off():
+            return None
+        try:
+            result = self.client.reflect(bank_id=self.bank_id, query=query)
+            self._record(CONNECTED, None)
+            text = getattr(result, "text", None)
+            return text.strip() if text else None
+        except Exception as exc:
+            log.warning("Hindsight reflect failed: %s", exc)
+            self._record(CONNECTION_FAILED, _describe(exc))
+            return None

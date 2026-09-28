@@ -1,5 +1,6 @@
 """ORM rows -> API response models."""
 
+from memory import incidents
 from models import schemas
 from models.tables import Audit, Dataset, Incident, Replay
 
@@ -19,6 +20,7 @@ def audit_summary(a: Audit) -> schemas.AuditSummary:
         id=a.id,
         dataset_id=a.dataset_id,
         dataset_name=a.dataset.name,
+        model_name=a.dataset.model_name,
         created_at=a.created_at,
         risk_score=a.risk_score,
         risk_band=a.risk_band,
@@ -28,6 +30,8 @@ def audit_summary(a: Audit) -> schemas.AuditSummary:
         affected_decisions=r["affected_decisions"],
         has_replay=bool(rep and rep.status == "completed"),
         auc_delta=rep.result["auc_delta"] if rep and rep.result else None,
+        recalled=len(a.memory_recall or []),
+        feedback=a.feedback,
     )
 
 
@@ -42,6 +46,11 @@ def audit_out(a: Audit) -> schemas.AuditOut:
         explanation=a.explanation,
         explanation_provider=a.explanation_provider,
         hindsight_context=a.hindsight_context or [],
+        agent_trace=a.agent_trace or [],
+        memory_recall=a.memory_recall or [],
+        recommendations=a.recommendations or [],
+        headline=incidents.headline(a.recommendations or []),
+        feedback=a.feedback,
     )
 
 

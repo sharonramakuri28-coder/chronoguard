@@ -9,7 +9,9 @@ Two layouts are supported and detected automatically:
 
 Only timestamps decide leakage. Columns that look like hand-written verdicts
 (``expected_status``, ``available_at_decision_time``, ``risk_level`` ...) are
-never used by the engine; they are reported back as ignored.
+never used by the engine; they are reported back as ignored. In the wide layout,
+identifiers (``customer_id``) and raw event timestamps (``transaction_timestamp``)
+without their own availability column are not model features and are ignored too.
 """
 
 from __future__ import annotations
@@ -43,7 +45,7 @@ AVAILABLE_ALIASES = [
 ]
 FEATURE_NAME_ALIASES = ["feature_name", "feature"]
 VALUE_ALIASES = ["feature_value", "value"]
-TARGET_ALIASES = ["target", "target_label", "label", "y", "outcome", "is_fraud", "class"]
+TARGET_ALIASES = ["target", "target_label", "label", "fraud_label", "y", "outcome", "is_fraud", "class"]
 ID_ALIASES = [
     "decision_id",
     "prediction_id",
@@ -78,6 +80,9 @@ _AVAIL_SUFFIX = re.compile(
 # Verdict-looking names (used only when the column has no availability timestamp of its own).
 _VERDICT_LIKE = re.compile(r"(leak|expected|verdict|risk_level|(^|_)status$)")
 _AVAIL_PREFIX = re.compile(r"^(?:available_time|available_at|availability_time|known_at)(?:__|_)(?P<f>.+)$")
+# Wide layout: identifiers (customer_id, store_id ...) and raw event timestamps are not model features.
+_IDENTIFIER = re.compile(r"(^|_)id$")
+_TIME_NAME = re.compile(r"(time|timestamp|date|datetime)$|_at$")
 
 
 class ParseError(ValueError):
@@ -245,8 +250,13 @@ def _parse_long(raw: pd.DataFrame, cols: dict[str, str], pred_col: str, feature_
     )
 
 
+def _is_timestamp_column(series: pd.Series) -> bool:
+    sample = series.dropna().head(200)
+    return len(sample) > 0 and _to_utc(sample).notna().mean() >= 0.9
+
+
 def _parse_wide(raw: pd.DataFrame, cols: dict[str, str], pred_col: str):
-    id_col = _find(cols, ID_ALIASES)
+    id_col = _find(cols, ID_ALIASES) or next((c for n, c in cols.items() if _IDENTIFIER.search(n)), None)
     target_col = _find(cols, TARGET_ALIASES)
 
     avail_map: dict[str, str] = {}  # feature column -> availability column
@@ -260,7 +270,14 @@ def _parse_wide(raw: pd.DataFrame, cols: dict[str, str], pred_col: str):
     ignored = [
         c
         for c in raw.columns
-        if c not in reserved and c not in avail_map and (_norm(c) in IGNORED_ALIASES or _VERDICT_LIKE.search(_norm(c)))
+        if c not in reserved
+        and c not in avail_map
+        and (
+            _norm(c) in IGNORED_ALIASES
+            or _VERDICT_LIKE.search(_norm(c))
+            or _IDENTIFIER.search(_norm(c))
+            or (_TIME_NAME.search(_norm(c)) and _is_timestamp_column(raw[c]))
+        )
     ]
     features = [c for c in raw.columns if c not in reserved and c not in ignored]
     if not features:

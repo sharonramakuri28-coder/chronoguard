@@ -2,10 +2,20 @@ import type {
   AffectedPage,
   AuditOut,
   AuditSummary,
+  ChatOut,
+  CommandCenterOut,
   DashboardOut,
+  FeedbackOut,
   HealthOut,
+  HindsightRecallOut,
+  HindsightReflectOut,
+  HindsightStatus,
+  IncidentDetail,
   IncidentOut,
+  MemoryEvent,
+  MemoryGraph,
   ReplayOut,
+  ReportOut,
   SampleOut,
   SearchOut,
 } from './types'
@@ -70,14 +80,27 @@ export const api = {
   audit: (id: number) => request<AuditOut>(`/api/audits/${id}`),
   affected: (id: number, offset: number, limit: number) =>
     request<AffectedPage>(`/api/audits/${id}/affected?offset=${offset}&limit=${limit}`),
-  upload: (file: File) => {
+  upload: ({ file, modelName }: { file: File; modelName?: string }) => {
     const form = new FormData()
     form.append('file', file)
+    if (modelName?.trim()) form.append('model_name', modelName.trim())
     return request<AuditOut>('/api/datasets', { method: 'POST', body: form })
   },
   auditSample: (name: string) => request<AuditOut>(`/api/samples/${encodeURIComponent(name)}/audit`, { method: 'POST' }),
   replay: (id: number) => request<ReplayOut | null>(`/api/audits/${id}/replay`),
   runReplay: (id: number) => request<ReplayOut>(`/api/audits/${id}/replay`, { method: 'POST' }),
-  incidents: () => request<IncidentOut[]>('/api/memory/incidents'),
+  feedback: (id: number, successful: boolean, note?: string) =>
+    request<FeedbackOut>(`/api/audits/${id}/feedback`, json({ successful, note: note?.trim() || null })),
+  incidents: () => request<IncidentOut[]>('/api/incidents'),
+  incident: (id: number) => request<IncidentDetail>(`/api/incidents/${id}`),
   search: (query: string) => request<SearchOut>('/api/memory/search', json({ query, limit: 6 })),
+  graph: () => request<MemoryGraph>('/api/memory/graph'),
+  timeline: () => request<MemoryEvent[]>('/api/memory/timeline'),
+  commandCenter: () => request<CommandCenterOut>('/api/command-center'),
+  hindsightStatus: () => request<HindsightStatus>('/api/hindsight/status'),
+  hindsightRecall: (query: string) => request<HindsightRecallOut>('/api/hindsight/recall', json({ query })),
+  hindsightReflect: (query: string) => request<HindsightReflectOut>('/api/hindsight/reflect', json({ query })),
+  report: (id: number) => request<ReportOut>(`/api/reports/${id}`),
+  reportDownloadUrl: (id: number) => `${API_URL}/api/reports/${id}/download`,
+  chat: (message: string, auditId?: number) => request<ChatOut>('/api/chat', json({ message, audit_id: auditId ?? null })),
 }

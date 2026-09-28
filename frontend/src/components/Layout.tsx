@@ -1,18 +1,21 @@
 import clsx from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Brain, FlaskConical, LayoutDashboard, Menu, ScanSearch, X } from 'lucide-react'
+import { Brain, FileText, FlaskConical, History, LayoutDashboard, Menu, ScanSearch, X } from 'lucide-react'
 import { Suspense, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation } from 'react-router-dom'
 import { hindsightLabel, providerLabel } from '../lib/format'
 import { useHealth } from '../hooks/useApi'
+import { ChatDrawer } from './ChatDrawer'
 import { Logo } from './Logo'
 import { PageSkeleton } from './ui'
 
 const NAV = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/audits', label: 'Audit Results', icon: ScanSearch },
+  { to: '/', label: 'Command Center', icon: LayoutDashboard },
+  { to: '/audits', label: 'Audit Intelligence', icon: ScanSearch },
+  { to: '/memory', label: 'Memory Brain', icon: Brain },
+  { to: '/timeline', label: 'Incident Timeline', icon: History },
   { to: '/replay', label: 'Model Replay', icon: FlaskConical },
-  { to: '/memory', label: 'Memory', icon: Brain },
+  { to: '/reports', label: 'Reports', icon: FileText },
 ]
 
 function StatusDot({ ok }: { ok: boolean | undefined }) {
@@ -57,37 +60,47 @@ function SystemStatus() {
   )
 }
 
+/** /audits/:id/replay belongs to Model Replay, not Audit Intelligence. */
+function useActive() {
+  const { pathname } = useLocation()
+  const replay = /^\/audits\/\d+\/replay/.test(pathname)
+  return (to: string) => {
+    if (to === '/') return pathname === '/'
+    if (to === '/replay') return replay || pathname.startsWith('/replay')
+    if (to === '/audits') return pathname.startsWith('/audits') && !replay
+    return pathname.startsWith(to)
+  }
+}
+
 function Nav({ onNavigate }: { onNavigate?: () => void }) {
+  const isActiveFor = useActive()
   return (
     <nav className="flex flex-col gap-1" aria-label="Main">
-      {NAV.map(({ to, label, icon: Icon, end }) => (
-        <NavLink
-          key={to}
-          to={to}
-          end={end}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            clsx(
+      {NAV.map(({ to, label, icon: Icon }) => {
+        const isActive = isActiveFor(to)
+        return (
+          <Link
+            key={to}
+            to={to}
+            onClick={onNavigate}
+            aria-current={isActive ? 'page' : undefined}
+            className={clsx(
               'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
               isActive ? 'bg-white/[0.06] text-white' : 'text-muted hover:bg-white/[0.03] hover:text-slate-200',
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              {isActive && (
-                <motion.span
-                  layoutId="nav-active"
-                  className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent"
-                  transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-                />
-              )}
-              <Icon className={clsx('size-4', isActive ? 'text-accent' : '')} aria-hidden />
-              {label}
-            </>
-          )}
-        </NavLink>
-      ))}
+            )}
+          >
+            {isActive && (
+              <motion.span
+                layoutId="nav-active"
+                className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent"
+                transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+              />
+            )}
+            <Icon className={clsx('size-4', isActive ? 'text-accent' : '')} aria-hidden />
+            {label}
+          </Link>
+        )
+      })}
     </nav>
   )
 }
@@ -98,7 +111,7 @@ export function Layout() {
 
   return (
     <div className="min-h-screen lg:pl-64">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-6 border-r border-line bg-ink-950/70 p-5 backdrop-blur-xl lg:flex">
+      <aside className="no-print fixed inset-y-0 left-0 hidden w-64 flex-col gap-6 border-r border-line bg-ink-950/70 p-5 backdrop-blur-xl lg:flex">
         <Logo />
         <Nav />
         <div className="mt-auto">
@@ -106,7 +119,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-ink-950/80 px-4 py-3 backdrop-blur-xl lg:hidden">
+      <header className="no-print sticky top-0 z-30 flex items-center justify-between border-b border-line bg-ink-950/80 px-4 py-3 backdrop-blur-xl lg:hidden">
         <Logo />
         <button className="btn btn-ghost h-9 px-3" onClick={() => setOpen(true)} aria-label="Open menu">
           <Menu className="size-4" />
@@ -139,7 +152,7 @@ export function Layout() {
         )}
       </AnimatePresence>
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+      <main className="mx-auto max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:px-10 lg:pt-10">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -154,6 +167,7 @@ export function Layout() {
           </motion.div>
         </AnimatePresence>
       </main>
+      <ChatDrawer />
     </div>
   )
 }

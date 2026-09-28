@@ -11,7 +11,7 @@ export function Logo() {
       </span>
       <span className="leading-tight">
         <span className="block text-sm font-semibold tracking-tight text-white">ChronoGuard</span>
-        <span className="block text-[10px] uppercase tracking-[0.18em] text-muted">Temporal ML audit</span>
+        <span className="block text-[10px] uppercase tracking-[0.18em] text-muted">AI reliability engineer</span>
       </span>
     </Link>
   )

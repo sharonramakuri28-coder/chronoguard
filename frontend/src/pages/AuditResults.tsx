@@ -1,7 +1,9 @@
-import { Bot, Brain, FileText, FlaskConical, ScanSearch } from 'lucide-react'
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Bot, Brain, FileText, FlaskConical, Lightbulb, RotateCcw, ScanSearch, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import { AgentThinking } from '../components/AgentThinking'
 import { DelayHistogram } from '../components/charts'
+import { FeedbackPrompt, RecallPanel, Recommendations, ReportLink } from '../components/MemoryPanels'
 import { EvidencePanel } from '../components/EvidencePanel'
 import { FeatureRiskTable } from '../components/FeatureRiskTable'
 import { LeakageTimeline } from '../components/LeakageTimeline'
@@ -51,6 +53,13 @@ function AffectedDecisions({ id, total }: { id: number; total: number }) {
 function AuditResults({ id }: { id: number }) {
   const { data: a, isLoading, error, refetch } = useAudit(id)
   const [selected, setSelected] = useState<string | null>(null)
+  const [replayKey, setReplayKey] = useState(0)
+  const { hash } = useLocation()
+  const loaded = !!a
+
+  useEffect(() => {
+    if (loaded && hash) window.setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300)
+  }, [loaded, hash])
 
   if (isLoading) return <PageSkeleton />
   if (error) return <ErrorState error={error} onRetry={() => refetch()} />
@@ -68,6 +77,8 @@ function AuditResults({ id }: { id: number }) {
         title={<span className="font-mono text-2xl sm:text-3xl">{a.dataset.name}</span>}
         subtitle={
           <span className="flex flex-wrap gap-2">
+            {a.dataset.model_name && <Pill className="text-accent">{a.dataset.model_name}</Pill>}
+            {a.dataset.is_sample && <Pill>synthetic sample</Pill>}
             <Pill>{a.dataset.layout} layout</Pill>
             <Pill>{fmtInt(a.dataset.total_rows)} rows</Pill>
             <Pill>
@@ -80,11 +91,53 @@ function AuditResults({ id }: { id: number }) {
           </span>
         }
         actions={
-          <Link to={`/audits/${a.id}/replay`} className="btn btn-primary">
-            <FlaskConical className="size-4" aria-hidden /> Replay model
-          </Link>
+          <>
+            <ReportLink id={a.id} />
+            <Link to={`/audits/${a.id}/replay`} className="btn btn-primary">
+              <FlaskConical className="size-4" aria-hidden /> Replay model
+            </Link>
+          </>
         }
       />
+
+      <div className="mb-4 grid gap-4 lg:grid-cols-2">
+        <GlassCard className="glass-strong">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Sparkles className="size-4 text-accent" aria-hidden /> Agent reasoning
+            </h2>
+            <button className="btn btn-ghost h-8 px-2.5 text-xs" onClick={() => setReplayKey((k) => k + 1)} aria-label="Replay agent steps">
+              <RotateCcw className="size-3.5" aria-hidden /> Replay
+            </button>
+          </div>
+          <AgentThinking steps={a.agent_trace} replayKey={replayKey} />
+        </GlassCard>
+        <GlassCard className="glass-strong" delay={0.05}>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
+              <Brain className="size-4 text-memory" aria-hidden /> Similar incidents remembered
+            </h2>
+            <span className="text-xs text-muted">{a.memory_recall.length} recalled</span>
+          </div>
+          <RecallPanel audit={a} />
+        </GlassCard>
+      </div>
+
+      {a.leaked_features.length > 0 && (
+        <div className="mb-4 grid gap-4 lg:grid-cols-5">
+          <GlassCard className="lg:col-span-3" delay={0.08}>
+            <SectionTitle hint="Highest risk first">
+              <span className="flex items-center gap-2">
+                <Lightbulb className="size-4 text-accent" aria-hidden /> Recommendations
+              </span>
+            </SectionTitle>
+            <Recommendations recs={a.recommendations} />
+          </GlassCard>
+          <div className="lg:col-span-2" id="feedback">
+            <FeedbackPrompt audit={a} />
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-4">
         <GlassCard className="flex flex-col items-center justify-center gap-2">

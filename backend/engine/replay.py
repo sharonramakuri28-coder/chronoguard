@@ -24,6 +24,16 @@ from engine.parsing import ParsedDataset
 MIN_DECISIONS = 200
 TRAIN_FRACTION = 0.7
 SEED = 42
+MAX_CATEGORIES = 250  # HistGradientBoosting supports at most 255 bins per categorical feature
+
+
+def _model_ready(X: pd.DataFrame) -> pd.DataFrame:
+    """High-cardinality text columns (free-form IDs, notes) become integer codes instead of crashing the fit."""
+    X = X.copy()
+    for c in X.columns:
+        if isinstance(X[c].dtype, pd.CategoricalDtype) and len(X[c].cat.categories) > MAX_CATEGORIES:
+            X[c] = X[c].cat.codes.replace(-1, np.nan).astype(float)
+    return X
 
 
 class ReplayUnavailable(ValueError):
@@ -101,7 +111,7 @@ def run_replay(ds: ParsedDataset, leaked_features: list[str]) -> ReplayResult:
     features = [c for c in X.columns if X[c].notna().any()]
     if not features:
         raise ReplayUnavailable("Replay needs feature values (a feature_value column or wide-format values).")
-    X = X[features]
+    X = _model_ready(X[features])
     y = decisions["target"].astype(int).to_numpy()
 
     cut = int(len(decisions) * TRAIN_FRACTION)

@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel
+from pydantic import AfterValidator, BaseModel, Field
 
 # SQLite returns naive datetimes; everything is stored in UTC, so mark it explicitly.
 UTCDatetime = Annotated[datetime, AfterValidator(lambda d: d if d.tzinfo else d.replace(tzinfo=UTC))]
@@ -75,13 +75,58 @@ class DatasetOut(BaseModel):
     has_target: bool
     column_mapping: dict[str, str | None]
     ignored_columns: list[str]
+    model_name: str | None = None
     uploaded_at: UTCDatetime
+
+
+class AgentStep(BaseModel):
+    key: str
+    title: str
+    detail: str
+    outcome: str  # ok | warning | found
+    ms: int
+    facts: dict[str, str | int | float | bool | None]
+
+
+class RecallEntry(BaseModel):
+    incident_id: int
+    past_feature: str
+    past_dataset: str
+    past_model: str | None
+    learned_at: str | None
+    similarity: float
+    matched_feature: str
+    matched_status: str
+    lesson: str
+    solution: str | None
+    impact: str | None
+    fix_confirmations: int
+    fix_rejections: int
+    fix_confidence: float | None
+
+
+class Recommendation(BaseModel):
+    feature: str
+    priority: str
+    action: str
+    reason: str
+    memory: str | None
+    confidence: float | None
+
+
+class Feedback(BaseModel):
+    successful: bool
+    note: str | None
+    at: str
+    incidents_updated: int | None = None  # absent on feedback stored before these counts existed
+    hindsight_synced: int | None = None
 
 
 class AuditSummary(BaseModel):
     id: int
     dataset_id: int
     dataset_name: str
+    model_name: str | None = None
     created_at: UTCDatetime
     risk_score: float
     risk_band: str
@@ -91,6 +136,8 @@ class AuditSummary(BaseModel):
     affected_decisions: int
     has_replay: bool
     auc_delta: float | None
+    recalled: int = 0
+    feedback: Feedback | None = None
 
 
 class AuditOut(BaseModel):
@@ -119,6 +166,11 @@ class AuditOut(BaseModel):
     explanation_provider: str
     hindsight_context: list[str]
     new_incidents: int
+    agent_trace: list[AgentStep]
+    memory_recall: list[RecallEntry]
+    recommendations: list[Recommendation]
+    headline: str | None
+    feedback: Feedback | None
 
 
 class AffectedPage(BaseModel):
@@ -181,6 +233,40 @@ class IncidentOut(BaseModel):
     lesson_provider: str
     hindsight_retained: bool
     created_at: UTCDatetime
+    incident_type: str | None = None
+    model_name: str | None = None
+    cause: str | None = None
+    evidence: dict[str, str | int | float | None] | None = None
+    solution: str | None = None
+    impact: str | None = None
+    impact_auc_drop: float | None = None
+    recurrence_of: int | None = None
+    times_recalled: int = 0
+    fix_confirmations: int = 0
+    fix_rejections: int = 0
+    fix_confidence: float | None = None
+    hindsight_document_id: str | None = None
+    updated_at: UTCDatetime | None = None
+
+
+class IncidentDetail(BaseModel):
+    incident: IncidentOut
+    recurrence_of: IncidentOut | None
+    recurrences: list[IncidentOut]
+    recalled_by: list[AuditSummary]
+    hindsight_record: str
+
+
+class FeedbackIn(BaseModel):
+    successful: bool
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class FeedbackOut(BaseModel):
+    audit_id: int
+    feedback: Feedback
+    updated_incidents: list[IncidentOut]
+    hindsight_synced: int
 
 
 class SearchRequest(BaseModel):
@@ -207,6 +293,9 @@ class SampleOut(BaseModel):
     title: str
     description: str
     size_bytes: int
+    model: str
+    group: str  # demo | history | more
+    seed: bool
 
 
 class HealthOut(BaseModel):
@@ -228,5 +317,110 @@ class DashboardOut(BaseModel):
     recurring_matches: int
     average_risk: float | None
     replays: int
+    mean_auc_inflation: float | None
+    audits: list[AuditSummary]
+
+
+# ---------------------------------------------------------------- memory brain
+class GraphNode(BaseModel):
+    id: str
+    kind: str  # incident | pattern | detection
+    label: str
+    sublabel: str
+    weight: float
+    ref: int | None  # incident id or audit id
+
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    kind: str  # belongs_to | recalled_by
+    similarity: float | None
+
+
+class MemoryGraph(BaseModel):
+    provider: str
+    threshold: float
+    nodes: list[GraphNode]
+    edges: list[GraphEdge]
+
+
+class MemoryEvent(BaseModel):
+    at: UTCDatetime
+    kind: str  # learned | recalled | clean | replay | fix_confirmed | fix_rejected
+    title: str
+    detail: str
+    audit_id: int | None = None
+    incident_id: int | None = None
+
+
+# ---------------------------------------------------------------- hindsight
+class HindsightStatus(BaseModel):
+    state: str
+    detail: str | None
+    host: str | None
+    bank_id: str | None
+    retained_incidents: int
+    total_incidents: int
+
+
+class HindsightQuery(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+
+
+class HindsightRecallOut(BaseModel):
+    query: str
+    state: str
+    memories: list[str]
+
+
+class HindsightReflectOut(BaseModel):
+    query: str
+    state: str
+    answer: str | None
+
+
+# ---------------------------------------------------------------- reports
+class ReportOut(BaseModel):
+    audit_id: int
+    title: str
+    generated_at: UTCDatetime
+    markdown: str
+
+
+# ---------------------------------------------------------------- chat
+class ChatIn(BaseModel):
+    message: str = Field(min_length=1, max_length=1000)
+    audit_id: int | None = None
+
+
+class Citation(BaseModel):
+    kind: str  # audit | feature | incident | replay | hindsight
+    label: str
+    ref: int | None = None
+
+
+class ChatOut(BaseModel):
+    answer: str
+    intent: str
+    provider: str  # grounded | hindsight-reflect
+    citations: list[Citation]
+    suggestions: list[str]
+
+
+# ---------------------------------------------------------------- command center
+class CommandCenterOut(BaseModel):
+    models_protected: int
+    datasets_audited: int
+    decisions_audited: int
+    incidents_learned: int
+    repeat_failures_caught: int
+    prevented_failures: int
+    feedback_count: int
+    memory_confidence: float | None
+    patterns: int
+    hindsight: str
+    hindsight_retained: int
+    average_risk: float | None
     mean_auc_inflation: float | None
     audits: list[AuditSummary]

@@ -1,4 +1,8 @@
-"""ORM tables. Deterministic facts (timestamps, findings, metrics) live here."""
+"""ORM tables. Deterministic facts (timestamps, findings, metrics) live here.
+
+Columns added after the first release are nullable or have a server default, so
+``database.session.init_db`` can add them to an existing database in place.
+"""
 
 from datetime import UTC, datetime
 
@@ -25,6 +29,7 @@ class Dataset(Base):
     has_target: Mapped[bool] = mapped_column(Boolean)
     column_mapping: Mapped[dict] = mapped_column(JSON)
     ignored_columns: Mapped[list] = mapped_column(JSON)
+    model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     audits: Mapped[list["Audit"]] = relationship(back_populates="dataset", cascade="all, delete-orphan")
@@ -44,6 +49,13 @@ class Audit(Base):
     explanation: Mapped[str] = mapped_column(Text)
     explanation_provider: Mapped[str] = mapped_column(String(64))
     hindsight_context: Mapped[list] = mapped_column(JSON, default=list)
+    # The agent's work, recorded as it happened: steps with timings and facts.
+    agent_trace: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Past incidents recognised in this dataset ("similar incidents remembered").
+    memory_recall: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    recommendations: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Team feedback on the recommended fix: {"successful": bool, "note": str | None, "at": iso}.
+    feedback: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     dataset: Mapped[Dataset] = relationship(back_populates="audits")
     replays: Mapped[list["Replay"]] = relationship(back_populates="audit", cascade="all, delete-orphan")
@@ -81,3 +93,26 @@ class Incident(Base):
     azure_embedding: Mapped[list | None] = mapped_column(JSON, nullable=True)
     hindsight_retained: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    # Structured incident record (what is retained into Hindsight).
+    incident_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    solution: Mapped[str | None] = mapped_column(Text, nullable=True)
+    impact: Mapped[str | None] = mapped_column(Text, nullable=True)
+    impact_auc_drop: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The earlier incident this one repeats, when memory recognised it at detection time.
+    recurrence_of: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Learning signals.
+    times_recalled: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    fix_confirmations: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    fix_rejections: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    hindsight_document_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def fix_confidence(self) -> float | None:
+        """Laplace-smoothed share of confirmed fixes; None until the team gives feedback."""
+        yes, no = self.fix_confirmations or 0, self.fix_rejections or 0
+        return None if yes + no == 0 else round((yes + 1) / (yes + no + 2), 4)
