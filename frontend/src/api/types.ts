@@ -69,13 +69,56 @@ export interface DatasetOut {
   has_target: boolean
   column_mapping: Record<string, string | null>
   ignored_columns: string[]
+  model_name: string | null
   uploaded_at: string
+}
+
+export interface AgentStep {
+  key: 'understand' | 'temporal' | 'memory' | 'recommend' | 'retain' | string
+  title: string
+  detail: string
+  outcome: 'ok' | 'warning' | 'found' | string
+  ms: number
+  facts: Record<string, string | number | boolean | null>
+}
+
+export interface RecallEntry {
+  incident_id: number
+  past_feature: string
+  past_dataset: string
+  past_model: string | null
+  learned_at: string | null
+  similarity: number
+  matched_feature: string
+  matched_status: FeatureStatus
+  lesson: string
+  solution: string | null
+  impact: string | null
+  fix_confirmations: number
+  fix_rejections: number
+  fix_confidence: number | null
+}
+
+export interface Recommendation {
+  feature: string
+  priority: Band
+  action: string
+  reason: string
+  memory: string | null
+  confidence: number | null
+}
+
+export interface Feedback {
+  successful: boolean
+  note: string | null
+  at: string
 }
 
 export interface AuditSummary {
   id: number
   dataset_id: number
   dataset_name: string
+  model_name: string | null
   created_at: string
   risk_score: number
   risk_band: Band
@@ -85,6 +128,8 @@ export interface AuditSummary {
   affected_decisions: number
   has_replay: boolean
   auc_delta: number | null
+  recalled: number
+  feedback: Feedback | null
 }
 
 export interface AuditOut {
@@ -113,6 +158,11 @@ export interface AuditOut {
   explanation_provider: string
   hindsight_context: string[]
   new_incidents: number
+  agent_trace: AgentStep[]
+  memory_recall: RecallEntry[]
+  recommendations: Recommendation[]
+  headline: string | null
+  feedback: Feedback | null
 }
 
 export interface AffectedPage {
@@ -169,6 +219,20 @@ export interface IncidentOut {
   lesson_provider: string
   hindsight_retained: boolean
   created_at: string
+  incident_type: string | null
+  model_name: string | null
+  cause: string | null
+  evidence: Record<string, string | number | null> | null
+  solution: string | null
+  impact: string | null
+  impact_auc_drop: number | null
+  recurrence_of: number | null
+  times_recalled: number
+  fix_confirmations: number
+  fix_rejections: number
+  fix_confidence: number | null
+  hindsight_document_id: string | null
+  updated_at: string | null
 }
 
 export interface SearchOut {
@@ -184,6 +248,9 @@ export interface SampleOut {
   title: string
   description: string
   size_bytes: number
+  model: string
+  group: 'demo' | 'history' | 'more'
+  seed: boolean
 }
 
 export interface HealthOut {
@@ -205,6 +272,112 @@ export interface DashboardOut {
   recurring_matches: number
   average_risk: number | null
   replays: number
+  mean_auc_inflation: number | null
+  audits: AuditSummary[]
+}
+
+export interface IncidentDetail {
+  incident: IncidentOut
+  recurrence_of: IncidentOut | null
+  recurrences: IncidentOut[]
+  recalled_by: AuditSummary[]
+  hindsight_record: string
+}
+
+export interface FeedbackOut {
+  audit_id: number
+  feedback: Feedback
+  updated_incidents: IncidentOut[]
+  hindsight_synced: number
+}
+
+export interface GraphNode {
+  id: string
+  kind: 'incident' | 'pattern' | 'detection'
+  label: string
+  sublabel: string
+  weight: number
+  ref: number | null
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  kind: 'belongs_to' | 'recalled_by'
+  similarity: number | null
+}
+
+export interface MemoryGraph {
+  provider: string
+  threshold: number
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+export interface MemoryEvent {
+  at: string
+  kind: 'learned' | 'recalled' | 'clean' | 'replay' | 'fix_confirmed' | 'fix_rejected'
+  title: string
+  detail: string
+  audit_id: number | null
+  incident_id: number | null
+}
+
+export interface HindsightStatus {
+  state: string
+  detail: string | null
+  host: string | null
+  bank_id: string | null
+  retained_incidents: number
+  total_incidents: number
+}
+
+export interface HindsightRecallOut {
+  query: string
+  state: string
+  memories: string[]
+}
+
+export interface HindsightReflectOut {
+  query: string
+  state: string
+  answer: string | null
+}
+
+export interface ReportOut {
+  audit_id: number
+  title: string
+  generated_at: string
+  markdown: string
+}
+
+export interface Citation {
+  kind: 'audit' | 'feature' | 'incident' | 'replay' | 'hindsight'
+  label: string
+  ref: number | null
+}
+
+export interface ChatOut {
+  answer: string
+  intent: string
+  provider: 'grounded' | 'hindsight-reflect'
+  citations: Citation[]
+  suggestions: string[]
+}
+
+export interface CommandCenterOut {
+  models_protected: number
+  datasets_audited: number
+  decisions_audited: number
+  incidents_learned: number
+  repeat_failures_caught: number
+  prevented_failures: number
+  feedback_count: number
+  memory_confidence: number | null
+  patterns: number
+  hindsight: string
+  hindsight_retained: number
+  average_risk: number | null
   mean_auc_inflation: number | null
   audits: AuditSummary[]
 }

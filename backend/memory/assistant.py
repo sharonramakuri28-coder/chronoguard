@@ -177,6 +177,9 @@ def answer(db: Session, message: str, audit: Audit | None, hindsight: HindsightA
         )
     feature = _find_feature(message, audit)
     intent = _intent(message)
+    if feature is None and re.search(r"\b(this|the|that) feature\b|\brisky\b|\bdangerous\b", message.lower()):
+        top = audit.risk["features"][0]["feature"] if audit.risk["features"] else None
+        feature = next((f for f in audit.result["feature_results"] if f["feature"] == top), None)
     provider = GROUNDED
     if feature and intent not in ("memory", "replay"):
         intent = "feature"

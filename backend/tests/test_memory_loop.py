@@ -194,3 +194,9 @@ def test_migration_adds_new_columns_to_an_old_database(tmp_path):
     assert {"cause", "solution", "fix_confirmations", "hindsight_document_id"} <= cols
     with engine.connect() as conn:
         assert conn.execute(text("SELECT fix_confirmations, times_recalled FROM incidents")).one() == (0, 0)
+
+
+def test_assistant_defaults_to_the_riskiest_feature(client, story):
+    v2 = story["v2"]
+    body = client.post("/api/chat", json={"message": "Why was this feature risky?", "audit_id": v2["id"]}).json()
+    assert body["intent"] == "feature" and v2["risk"]["features"][0]["feature"] in body["answer"]

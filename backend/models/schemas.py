@@ -134,6 +134,8 @@ class AuditSummary(BaseModel):
     affected_decisions: int
     has_replay: bool
     auc_delta: float | None
+    recalled: int = 0
+    feedback: Feedback | None = None
 
 
 class AuditOut(BaseModel):

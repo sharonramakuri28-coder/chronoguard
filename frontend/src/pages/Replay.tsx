@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion'
-import { ArrowRight, FlaskConical, Info, Loader2, Play } from 'lucide-react'
-import { Link, useParams } from 'react-router-dom'
+import { ArrowRight, FlaskConical, Info, Loader2, Play, TriangleAlert } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { AuditPicker } from '../components/AuditPicker'
 import { AblationChart, MetricCompare } from '../components/charts'
 import { AnimatedNumber } from '../components/AnimatedNumber'
 import { EmptyState, ErrorState, GlassCard, PageHeader, PageSkeleton, Pill, SectionTitle, StatTile } from '../components/ui'
@@ -11,7 +13,7 @@ import { LatestAuditRedirect } from './LatestAuditRedirect'
 
 export function ReplayRoute() {
   const { id } = useParams()
-  if (!id) return <LatestAuditRedirect to={(a) => `/audits/${a}/replay`} />
+  if (!id) return <LatestAuditRedirect to={(a) => `/audits/${a}/replay`} prefer={(a) => a.leaked_features > 0} />
   return <Replay id={Number(id)} />
 }
 
@@ -38,6 +40,20 @@ function Headline({ r }: { r: ReplayResult }) {
           <p className="mt-1 text-xs text-muted">{r.leak_free.features.length} features available in time</p>
         </div>
       </div>
+      {leaky && r.auc_delta < 0 && (
+        <div className="mx-auto mt-6 flex max-w-2xl items-start gap-3 rounded-xl border border-leak/30 bg-leak/[0.06] p-4 text-left">
+          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-leak" aria-hidden />
+          <div>
+            <p className="font-semibold text-white">The previous score was inflated because future information was used.</p>
+            <p className="mt-1 text-sm text-slate-300">
+              Accuracy {fmtPct(r.baseline.accuracy)} → {fmtPct(r.leak_free.accuracy)}, ROC-AUC {fmtMetric(r.baseline.auc)} →{' '}
+              {fmtMetric(r.leak_free.auc)} on the same held-out period. The leak-free numbers are what this model can deliver in
+              production, where {r.removed_features.length === 1 ? 'this value does' : 'these values do'} not exist yet at
+              prediction time.
+            </p>
+          </div>
+        </div>
+      )}
       <p className="mt-6 text-center text-base text-slate-200">
         {leaky ? (
           <>
@@ -57,6 +73,16 @@ function Replay({ id }: { id: number }) {
   const audit = useAudit(id)
   const replay = useReplay(id)
   const run = useRunReplay(id)
+  const [params, setParams] = useSearchParams()
+  const autoRan = useRef(false)
+
+  // Opened from the guided demo (?run=1): run the replay once if this audit has none yet.
+  useEffect(() => {
+    if (params.get('run') !== '1' || autoRan.current || replay.isLoading || replay.data || run.isPending) return
+    autoRan.current = true
+    setParams({}, { replace: true })
+    run.mutate()
+  }, [params, replay.isLoading, replay.data, run, setParams])
 
   if (audit.isLoading || replay.isLoading) return <PageSkeleton />
   if (audit.error) return <ErrorState error={audit.error} onRetry={() => audit.refetch()} />
@@ -74,6 +100,7 @@ function Replay({ id }: { id: number }) {
         subtitle="Two identical models are trained on the earliest 70% of decisions and tested on the latest 30%: one with every feature, one with the leaked features removed. The gap is the performance that only existed because of the leak."
         actions={
           <>
+            <AuditPicker current={a.id} path={(x) => `/audits/${x}/replay`} />
             <Link to={`/audits/${a.id}`} className="btn btn-ghost">
               Back to audit
             </Link>
@@ -125,7 +152,28 @@ function Replay({ id }: { id: number }) {
             </GlassCard>
             <GlassCard className="xl:col-span-2">
               <SectionTitle hint="AUC lost when only that feature is removed">Leaked feature contribution</SectionTitle>
-              {r.ablation.length ? (
+              {r.ablation.length && Math.max(...r.ablation.map((x) => Math.abs(x.auc_drop))) < 0.001 ? (
+                <div className="space-y-3 text-sm text-slate-300">
+                  <p>
+                    Removing any <em>single</em> leaked feature changes ROC-AUC by less than 0.001: the leaked fields carry the same
+                    post-outcome signal, so each one covers for the others.
+                  </p>
+                  <p>
+                    Removing <span className="font-semibold text-white">all {r.removed_features.length}</span> together costs{' '}
+                    <span className="num font-semibold text-leak">{fmtDelta(r.auc_delta)}</span> ROC-AUC. Fix them as a group; dropping
+                    one at a time will look harmless.
+                  </p>
+                  <ul className="flex flex-wrap gap-1.5">
+                    {r.ablation.map((x) => (
+                      <li key={x.feature}>
+                        <Pill className="font-mono">
+                          {x.feature} {fmtDelta(-x.auc_drop)}
+                        </Pill>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : r.ablation.length ? (
                 <>
                   <AblationChart items={r.ablation} />
                   <p className="mt-2 text-xs text-muted">

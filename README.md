@@ -1,67 +1,108 @@
 # ChronoGuard
 
-**Your model should only know what the world knew.**
+**An AI Reliability Engineer that remembers every ML failure and prevents the next one.**
 
-ChronoGuard audits machine-learning datasets for *temporal leakage*, measures how much it inflates a model's
-performance, and remembers every incident so the same mistake is caught when it returns.
+ChronoGuard audits machine-learning training data for *temporal leakage* (information from the future),
+measures how much it inflated the model, and retains every incident in long-term memory. When the same
+failure comes back, in another model, another team or under another column name, ChronoGuard recognises it
+before the model ships, recommends the fix that worked last time, and learns from whether it worked again.
 
 - **Live API:** https://chronoguard-pt4n.onrender.com/docs (free tier, so the first request may take up to a minute while it wakes up)
-- **Sample datasets:** [`backend/data/samples/`](backend/data/samples). They can also be downloaded from the app's dashboard.
+- **Sample datasets:** [`backend/data/samples/`](backend/data/samples) (synthetic, reproducible). They can also be downloaded in the app.
 
 ---
 
 ## The problem
 
 A model can only use what was known at the moment it made a prediction. Training tables are usually built
-later, by joining data that arrived *after* the decision:
+later, by joining data that arrived *after* the decision: a fraud confirmation recorded two weeks after the
+card transaction, a payment state finalised days later, an investigation outcome closed a month later. The
+model learns from the future, offline metrics look excellent, and production performance collapses.
 
-- a chargeback flag recorded a week after the card transaction;
-- a settlement status finalized two days later;
-- an economic indicator revised after the fact.
+Finding the leak once is not the hard part. **Organisations keep repeating it.** The next model iteration, a
+different team, or a rebuilt feature table joins the same post-outcome signal again under a new name
+(`fraud_confirmed` becomes `confirmed_fraud_flag`, `cb_resolution_flag` becomes `chargeback_resolution`). The
+knowledge of what went wrong last time lives in a post-mortem nobody reads.
 
-The model learns from the future. Offline metrics look excellent, the model ships, and production performance
-collapses. This **temporal leakage** is one of the most common and most expensive ML failures, and nothing in
-a normal training pipeline flags it. It also recurs: the next team, or the next quarter's model, joins the same
-signal under a new column name.
+## Why memory matters
 
-## The solution
+A stateless auditor treats every dataset as the first one it has ever seen. ChronoGuard keeps an incident
+memory and runs a **retain → recall → learn** loop around every audit:
 
-ChronoGuard answers three questions for any dataset:
+| Step | What happens | Where |
+|---|---|---|
+| **Retain** | Each leaked feature becomes a structured incident: incident type, dataset, model, feature, cause, timeline evidence (a real decision and its timestamps), fix, measured impact from the replay, recurrence link, fix feedback and lesson. | SQL incident store (source of truth) and Hindsight (`retain`, one document per incident, replaced in place when it changes) |
+| **Recall** | Before scoring a new dataset, the agent searches memory for incidents similar to its features and shows *Similar incidents remembered* with similarity, the past fix, and whether that fix worked. Recalled matches raise the risk score and turn into recommendations such as *Remove confirmed_fraud_flag, investigation_outcome, chargeback_resolution and payment_final_status before training.* | Vector search over incidents; Hindsight `recall` for organisational context |
+| **Learn** | After an audit the team answers **“Was this fix successful?”**. The answer is written onto this dataset's incidents *and* every remembered incident the audit recalled, and re-retained into Hindsight. Future recalls say “that fix was confirmed to work 1 time(s)”, or warn that it did not. | `POST /api/audits/{id}/feedback`; Hindsight `retain` (replace) |
 
-| Question | How ChronoGuard answers it |
+The assistant can also ask Hindsight to **reflect** over everything retained (“Have we seen this failure
+before?”), and labels those answers as such.
+
+### How Hindsight improves the agent
+
+The SQL store answers *“which past feature looks like this one?”*. [Hindsight](https://hindsight.vectorize.io)
+adds organisational memory on top: it extracts facts and entities from each retained incident record, so
+recall can surface related knowledge (a model, a data source, a past fix) and `reflect` can reason across all
+incidents rather than one match at a time. Each record carries metadata (`dataset`, `model`, `feature`,
+fix counts) and tags (`temporal-leakage`, `feature:…`, `model:…`) and a stable document id, so feedback
+updates the memory instead of duplicating it.
+
+Hindsight is optional. Without credentials ChronoGuard runs entirely on its local incident store, and the UI
+says so. Every Hindsight call is bounded by a timeout and fails closed.
+
+## What you see
+
+| Page | What it shows |
 |---|---|
-| **Did the model see the future?** | Compares every feature value's availability time with the decision's prediction time. A value leaks when `available_time > prediction_time`. It uses timestamps only, never hand-written labels. |
-| **How much did it matter?** | Replays the model on a time-ordered split with and without the leaked features and reports the **measured** drop in ROC-AUC, accuracy, precision, recall and F1. |
-| **Have we seen this before?** | Stores every leak as an incident in a vector memory. A new dataset's columns are compared against past incidents, so a leak that returns under a new name (`cb_resolution_flag` ≈ `chargeback_filed`) is recognised and scored higher. |
+| **Command Center** | KPIs (models protected, incidents learned, prevented failures, memory confidence), an animated neural view of the memory, and the guided 5-scene demo |
+| **Audit Intelligence** | The agent's recorded reasoning (*Understanding dataset → Checking temporal availability → Searching N previous ML incidents → Generating recommendation → Retaining lessons*), similar incidents remembered, recommendations, the feedback prompt, and the full evidence (risk gauge, leakage timeline, delay histogram, per-feature evidence, affected decisions) |
+| **Memory Brain** | Memory graph (past incident → failure pattern → new detection), Hindsight status and reflect, memory search, every incident with its fix and fix confidence |
+| **Incident Timeline** | Every incident learned, recall, replay and fix confirmation, with an incident detail panel including the exact record retained in Hindsight |
+| **Model Replay** | Before vs after on a time-ordered split, with the explanation *the previous score was inflated because future information was used* |
+| **Reports** | One-click audit report: executive summary, risk score, evidence, timeline, replay, memory references, recommended fixes. Download as Markdown or print to PDF |
+| **Ask ChronoGuard** | An assistant grounded in the audit and memory (“Why was this feature risky?”, “Have we seen this before?”, “What should I fix first?”), with citations |
 
-Every number, chart, score and explanation in the UI is computed by the backend from the uploaded data.
+Every metric, chart, score and explanation is computed by the backend from the uploaded data. KPIs are plain
+counts over stored rows: *models protected* = distinct model names audited; *prevented failures* = leaked
+features whose recommended fix the team confirmed; *memory confidence* = (confirmed + 1) / (fix reports + 2),
+shown as “—” until there is feedback.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    U[Browser<br/>React + TypeScript] -->|CSV upload / REST| API[FastAPI]
-    subgraph Backend
-        API --> P[Parser<br/>long & wide CSV]
-        P --> D[Leakage detector<br/>available_time vs prediction_time]
-        D --> R[Risk scoring<br/>0–100]
-        M[(Incident memory<br/>vector search)] --> R
-        D --> M
-        D --> RP[Model replay<br/>baseline vs leak-free]
-        R --> X[Explainer]
-        API --> DB[(SQL database<br/>datasets · audits · replays · incidents)]
+    U[Browser<br/>React + TypeScript] -->|REST| API[FastAPI routers<br/>datasets · audits · memory · incidents<br/>hindsight · reports · chat · command-center]
+    subgraph Agent loop
+        API --> P[Parse<br/>long & wide CSV]
+        P --> D[Temporal check<br/>available_time vs prediction_time]
+        D --> RC[Recall<br/>similar incidents]
+        RC --> S[Risk score +<br/>recommendations]
+        S --> RT[Retain<br/>structured incidents]
+        RP[Model replay<br/>baseline vs leak-free] -->|measured impact| RT
+        FB[Fix feedback] -->|learn| RT
     end
-    M -. optional .-> AZ[Azure OpenAI<br/>embeddings + explanations]
-    M -. optional .-> HS[Hindsight<br/>long-term memory]
+    RC <--> MEM[(Incident store<br/>SQL + vectors)]
+    RT --> MEM
+    RC <-. recall .-> HS[(Hindsight<br/>long-term memory)]
+    RT -. retain .-> HS
+    CH[Assistant] -. reflect .-> HS
+    CH --> MEM
+    API --> DB[(SQL database<br/>datasets · audits · replays · incidents)]
+    MEM -. optional .-> AZ[Azure OpenAI<br/>embeddings + explanations]
 ```
 
-- **Deterministic core.** Parsing, detection, scoring and replay are plain Python (pandas and scikit-learn).
-  The same file always gives the same result.
-- **Facts in SQL.** Datasets, audits, per-feature findings, replays and incidents (with their vectors) are
-  stored in SQLite by default, or in any SQLAlchemy database such as Azure Database for PostgreSQL.
+- **Deterministic core.** Parsing, detection, scoring, replay, recommendations and the assistant's answers are
+  plain Python (pandas and scikit-learn). The same file always gives the same result.
+- **Facts in SQL.** Datasets, audits (including the agent trace, recall and recommendations), replays and
+  incidents are stored in SQLite by default or any SQLAlchemy database. New columns are added to existing
+  databases automatically on start.
 - **AI where it helps, never for the numbers.** Local vectors run offline. Azure OpenAI, when configured, adds
-  semantic embeddings and writes explanations grounded only in the measured facts. The UI always shows which
-  provider produced a text.
+  semantic embeddings and explanations grounded in the measured facts. Hindsight adds long-term memory. The UI
+  always shows which provider produced a text.
+
+Backend layout: `api/routers/` (one module per area), `engine/` (parse, detect, score, replay), `memory/`
+(incident records, store, Hindsight adapter, graph, assistant), `reports/` (report builder), `models/`,
+`database/`, `scripts/generate_samples.py`.
 
 ## Tech stack
 
@@ -70,58 +111,64 @@ flowchart LR
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, Framer Motion, Recharts, TanStack Query, React Router |
 | Backend | Python 3.11, FastAPI, Pydantic, SQLAlchemy 2 |
 | Analysis | pandas, NumPy, scikit-learn (`HistGradientBoostingClassifier`, hashed text vectors) |
-| Memory | Vector search over incidents in SQL; optional Azure OpenAI embeddings; optional Hindsight |
+| Memory | Incident store in SQL with vector search; optional Hindsight (`hindsight-client`); optional Azure OpenAI embeddings |
 | Storage | SQLite (default) or PostgreSQL |
-| Hosting | Render (API); any static host for the frontend (Render, Vercel, Netlify) |
 | Quality | pytest, ruff, TypeScript strict build, oxlint |
 
 ## How it works
 
-1. **Parse.** CSVs in *long* (one row per decision and feature) or *wide* (one row per decision) layout
-   are detected automatically, and common column names are recognised. Timestamps without a timezone are
-   treated as UTC. Verdict-like columns (`expected_status`, `available_at_decision_time`, …) are listed as
-   ignored and never used as evidence.
-2. **Detect.** For every (decision, feature) value: `delay = available_time − prediction_time`, and it leaks if
-   `delay > 0`. Per feature this gives the leak rate and min, median, 90th-percentile and max delay. For the
-   dataset it gives distinct affected decisions (not rows), a timeline for one real decision, and a delay
-   histogram.
-3. **Recall.** Each column is compared with past incidents from *other* datasets by cosine similarity. A match
-   is similarity ≥ 0.50 with local vectors, or ≥ 0.60 with Azure embeddings.
-4. **Score.** The formula is shown in the UI:
+1. **Parse.** CSVs in *long* (one row per decision and feature) or *wide* (one row per decision) layout are
+   detected automatically. Timestamps without a timezone are treated as UTC. In the wide layout, identifier
+   columns (`customer_id`, `merchant_id`, …) and raw event timestamps are not features. Verdict-like columns
+   are listed as ignored and never used as evidence.
+2. **Detect.** For every (decision, feature) value: `delay = available_time − prediction_time`; it leaks if
+   `delay > 0`. Per feature: leak rate and min/median/p90/max delay. Per dataset: distinct affected decisions,
+   a timeline for one real decision, and a delay histogram.
+3. **Recall.** Each feature is compared with incidents from *other* datasets by cosine similarity (match ≥ 0.50
+   with local vectors, ≥ 0.60 with Azure embeddings). When Hindsight is configured it is queried too.
+4. **Score and recommend.**
    ```
    feature score = 100 × √(leak rate) × severity(median delay) + memory boost (≤ 15 × similarity)
    severity      = 0.5 + 0.5 × min(1, log(1 + median delay h) / log(1 + 720))
    dataset score = 0.7 × max(feature scores) + 0.3 × mean(risky feature scores)
    bands         = low < 25 ≤ medium < 60 ≤ high
    ```
-   A feature with no timestamps but a strong memory match is flagged for review (scoring up to 45).
-5. **Remember.** Each leaked feature becomes an incident with its evidence, a lesson and a vector.
-6. **Replay.** Decisions are sorted by time. Two identical models train on the earliest 70% and are tested
-   on the latest 30%: one with all features, one without the leaked ones. A drop-one ablation measures each
-   leaked feature's own contribution. The replay needs a binary target and at least 200 labelled decisions;
-   otherwise it explains why no replay was run.
+   A feature that leaks in at least half of decisions is recommended for removal; one that leaks only
+   occasionally (a late batch job) is recommended to use its point-in-time value. Recommendations cite the
+   remembered incident and its fix feedback.
+5. **Retain.** Each leaked feature becomes a structured incident, stored in SQL and retained into Hindsight.
+6. **Replay.** Decisions are sorted by time; two identical models train on the earliest 70% and are tested on
+   the latest 30%, one with all features and one without the leaked ones. A drop-one ablation measures each
+   leaked feature's own contribution; when leaked fields carry the same signal, the UI explains that removing
+   one alone looks harmless while removing all of them does not. The measured impact is written back into
+   the incidents.
+7. **Learn.** Fix feedback updates the incidents and their Hindsight records.
 
-## Demo (about 2 minutes)
+## Demo: one failure, remembered (about 3 minutes)
 
-The backend seeds three **synthetic** sample datasets on first start, so the app is never empty.
+On first start the backend audits two **synthetic** history datasets (a retail forecast with future sales
+joined in, and a clean credit model), so memory has some experience. The fraud story is then played from the
+Command Center, one button per scene. Every number below was measured on the bundled synthetic data.
 
-1. Open the app and press **Try the demo**. It audits `fraud_detection_q2_wide.csv`, next quarter's fraud
-   model, with several columns renamed.
-2. **Audit Results:** risk **89/100**. The timeline shows `cb_resolution_flag` arriving about 7 days after the
-   prediction. Click the feature: the *Deterministic evidence* panel shows the timestamps, and the *Memory
-   evidence* panel shows it is 57% similar to `chargeback_filed`, which leaked in the Q1 dataset. It is a
-   **recurring leak**.
-3. **Replay model → Run replay:** ROC-AUC falls from about 0.99 with all features to about 0.64 without the
-   leaked ones. That is performance the model could never have had in production.
-4. **Memory:** search `chargeback_status_final` to see how a column you are about to use matches past
-   incidents.
-5. Compare with **Credit default · clean** on the dashboard: risk 0 and no replay gap. ChronoGuard does not
-   cry wolf.
-6. Upload your own CSV, or download a sample from the dashboard, edit it and upload it.
+1. **Model v1 ships with a hidden leak.** Audit `fraud_model_v1.csv` (7,200 transactions, 32 columns). The
+   agent searches memory, finds nothing similar, and flags `fraud_confirmed`, `payment_final_state`,
+   `investigation_result`, `cb_resolution_flag` (all post-outcome) plus `merchant_risk_score` (late in 12% of
+   rows). Risk 94/100. Five incidents are retained.
+2. **Replay: the score was a lie.** ROC-AUC 1.000 → 0.826 and accuracy 99.9% → 90.3% on the same held-out
+   period. *The previous score was inflated because future information was used.*
+3. **The team confirms the fix.** Answer *Yes, it worked*. The confirmation is stored on all five incidents.
+4. **Weeks later, model v2 arrives.** Another team rebuilt the table and renamed every leaky column. The agent
+   recalls all five past incidents (64–100% similar), each carrying the confirmed fix, and recommends:
+   *Remove confirmed_fraud_flag, investigation_outcome, chargeback_resolution and payment_final_status before
+   training.*
+5. **One-click report.** Open the report for v2: executive summary, evidence, timeline, memory references and
+   fixes, ready for the ticket.
 
-The sample data is generated by [`backend/scripts/generate_samples.py`](backend/scripts/generate_samples.py)
-(seeded, reproducible). Leakage verdicts are never stored in the files. ChronoGuard derives them from the
-timestamps.
+Ask the assistant “Why was this feature risky?” or “Have we seen this failure before?” at any point, and open
+**Memory Brain** to see the v2 detection linked to the patterns learned from v1.
+
+The data is generated by [`backend/scripts/generate_samples.py`](backend/scripts/generate_samples.py) (seeded,
+reproducible). Leakage verdicts are never stored in the files; ChronoGuard derives them from the timestamps.
 
 ## Run locally
 
@@ -178,7 +225,7 @@ automatically. For persistent history, set `CHRONOGUARD_DATABASE_URL` to a Postg
 | Environment | `VITE_API_URL=https://chronoguard-pt4n.onrender.com` (**required** at build time) |
 
 Single-page-app rewrites are included for Vercel (`vercel.json`), Netlify (`public/_redirects`) and Render
-(`render.yaml`), so deep links like `/audits/3` work after a refresh. A production build without
+(`render.yaml`), so deep links like `/audits/3` or `/reports/4` work after a refresh. A production build without
 `VITE_API_URL` shows a clear configuration error instead of calling a wrong address.
 
 ## Configuration and security
@@ -232,15 +279,20 @@ A binary `target` column (`target`, `label`, `is_fraud`, …) enables the replay
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | Database status and active memory, explanation and Hindsight providers |
-| POST | `/api/datasets` | Upload a CSV (multipart `file`) and get the full audit |
+| GET | `/api/command-center` · `/api/dashboard` | KPIs and aggregates across all audits |
+| POST | `/api/datasets` | Upload a CSV (multipart `file`, optional `model_name`) and get the full audit |
 | GET | `/api/samples` | List bundled samples |
-| POST | `/api/samples/{name}/audit` | Audit a bundled sample |
-| GET | `/api/samples/{name}/download` | Download a bundled sample |
-| GET | `/api/audits` · `/api/audits/{id}` | Audit summaries and full reports |
+| POST | `/api/samples/{name}/audit` · GET `/api/samples/{name}/download` | Audit or download a sample |
+| GET | `/api/audits` · `/api/audits/{id}` | Audit summaries and full audits (agent trace, recall, recommendations, feedback) |
 | GET | `/api/audits/{id}/affected` | Paginated affected decision IDs |
 | POST / GET | `/api/audits/{id}/replay` | Run a replay / latest replay (`null` if none yet) |
-| GET | `/api/memory/incidents` · POST `/api/memory/search` | Incident memory |
-| GET | `/api/dashboard` | Aggregates across all audits |
+| POST | `/api/audits/{id}/feedback` | `{"successful": true, "note": "…"}`: was the fix successful? |
+| GET | `/api/incidents` · `/api/incidents/{id}` | Structured incidents; detail with recurrences, recalling audits and the Hindsight record |
+| GET | `/api/memory/graph` · `/api/memory/timeline` | Memory graph and memory events |
+| GET | `/api/memory/incidents` · POST `/api/memory/search` | Incident list (legacy path) and similarity search |
+| GET | `/api/hindsight/status` · POST `/api/hindsight/recall` · POST `/api/hindsight/reflect` | Hindsight state and direct recall/reflect |
+| GET | `/api/reports/{audit_id}` · `/api/reports/{audit_id}/download` | Audit report (JSON with Markdown, or a `.md` file) |
+| POST | `/api/chat` | `{"message": "…", "audit_id": 4}`: grounded assistant answer with citations |
 
 Interactive documentation is served at `/docs` on the API.
 
@@ -250,6 +302,8 @@ Interactive documentation is served at `/docs` on the API.
   value was *backfilled* rather than when it became *known*, the audit inherits that error.
 - Offline memory matches renames that share words or common abbreviations. Pure synonyms
   (`payment_final_state` vs `settlement_status`) need Azure OpenAI embeddings.
+- The assistant answers from templates over the stored evidence; it does not hold an open-ended conversation.
+- Fix feedback is self-reported by the team and not verified against production metrics.
 - The replay measures the impact on one standard model class, not on the team's original model.
 
 ## Future improvements

@@ -7,10 +7,12 @@ import { Layout } from './components/Layout'
 import { EmptyState } from './components/ui'
 
 // Pages are split so the charting library only loads where it is used.
-const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })))
+const CommandCenter = lazy(() => import('./pages/CommandCenter').then((m) => ({ default: m.CommandCenter })))
 const AuditResultsRoute = lazy(() => import('./pages/AuditResults').then((m) => ({ default: m.AuditResultsRoute })))
 const ReplayRoute = lazy(() => import('./pages/Replay').then((m) => ({ default: m.ReplayRoute })))
 const Memory = lazy(() => import('./pages/Memory').then((m) => ({ default: m.Memory })))
+const IncidentTimeline = lazy(() => import('./pages/IncidentTimeline').then((m) => ({ default: m.IncidentTimeline })))
+const ReportsRoute = lazy(() => import('./pages/Reports').then((m) => ({ default: m.ReportsRoute })))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,7 +29,7 @@ const queryClient = new QueryClient({
 
 function NotFound() {
   return (
-    <EmptyState icon={<Compass className="size-5" />} title="Page not found" action={<Link to="/" className="btn btn-primary">Go to dashboard</Link>}>
+    <EmptyState icon={<Compass className="size-5" />} title="Page not found" action={<Link to="/" className="btn btn-primary">Go to Command Center</Link>}>
       This page does not exist.
     </EmptyState>
   )
@@ -39,12 +41,15 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<Layout />}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<CommandCenter />} />
             <Route path="audits" element={<AuditResultsRoute />} />
             <Route path="audits/:id" element={<AuditResultsRoute />} />
             <Route path="audits/:id/replay" element={<ReplayRoute />} />
             <Route path="replay" element={<ReplayRoute />} />
             <Route path="memory" element={<Memory />} />
+            <Route path="timeline" element={<IncidentTimeline />} />
+            <Route path="reports" element={<ReportsRoute />} />
+            <Route path="reports/:id" element={<ReportsRoute />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

@@ -30,6 +30,8 @@ def audit_summary(a: Audit) -> schemas.AuditSummary:
         affected_decisions=r["affected_decisions"],
         has_replay=bool(rep and rep.status == "completed"),
         auc_delta=rep.result["auc_delta"] if rep and rep.result else None,
+        recalled=len(a.memory_recall or []),
+        feedback=a.feedback,
     )
 
 
