@@ -20,7 +20,7 @@ did not exist yet when its prediction was made.
 
 | | |
 |---|---|
-| **Live app** | https://chronoguard-ochre.vercel.app/ |
+| **Live app** | https://chronoguard.vercel.app/ |
 | **Live API** | https://chronoguard-pt4n.onrender.com/docs (free tier: the first request may take up to a minute while it wakes up) |
 | **Hindsight** | 🟢 Connected: long-term incident memory active (host `api.hindsight.vectorize.io`, bank `chronoguard`) |
 | **Sample datasets** | [`backend/data/samples/`](backend/data/samples) (synthetic, reproducible; also downloadable in the app) |
@@ -389,7 +389,7 @@ Production:
 
 | Service | URL |
 |---|---|
-| Frontend (Vercel) | https://chronoguard-ochre.vercel.app/ |
+| Frontend (Vercel) | https://chronoguard.vercel.app/ |
 | Backend API (Render) | https://chronoguard-pt4n.onrender.com (interactive docs at `/docs`) |
 
 **Backend on Render.** The settings are recorded in [`render.yaml`](render.yaml):
