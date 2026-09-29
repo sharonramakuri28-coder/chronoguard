@@ -2,37 +2,106 @@
 
 ### AI Reliability Engineer That Learns From Every ML Failure
 
-**Detect → Remember → Explain → Learn**
+> ## “ChronoGuard has seen this failure before.”
 
-ChronoGuard is an AI agent that helps ML teams prevent repeated failures.
+ChronoGuard is an **AI agent** that audits machine-learning training data for **reliability failures**, starting
+with one of the most expensive and most repeated: *temporal leakage*, where a model trains on information that
+did not exist yet when its prediction was made.
 
-It detects hidden reliability risks in AI/ML systems, remembers previous incidents using
-[Hindsight](https://hindsight.vectorize.io) memory, and uses that knowledge to explain and prevent similar
-failures in the future.
+- **It detects failures.** It checks every feature value against the moment each prediction was made, scores
+  the risk, and replays the model without the leak to measure the real damage.
+- **[Hindsight](https://hindsight.vectorize.io) is its long-term memory layer.** Every reliability incident
+  becomes reusable knowledge that can be recalled when similar failures appear again: cause, evidence, fix,
+  impact and engineer feedback.
+- **It learns from previous incidents.** Before auditing a new dataset it recalls similar past failures, even
+  under renamed columns, and recommends the fix that worked last time.
 
-Today the agent specialises in one of the most expensive and most repeated ML failures: **temporal leakage**,
-training on information that did not exist yet when the prediction was made. Every leak it finds becomes a
-structured incident in memory. When the same failure comes back in another model, from another team or under
-another column name, ChronoGuard recognises it before the model ships, recommends the fix that worked last
-time, and learns from whether it worked again.
-
-> **“ChronoGuard has seen this failure before.”**
-> In the demo, a second fraud model renames every leaky column. The agent still recalls all five past
-> incidents (64–100% similar) and recommends the fix the team already confirmed.
+**Detect → Remember → Recall → Explain → Learn**
 
 | | |
 |---|---|
 | **Live app** | https://chronoguard-ochre.vercel.app/ |
 | **Live API** | https://chronoguard-pt4n.onrender.com/docs (free tier: the first request may take up to a minute while it wakes up) |
+| **Hindsight** | 🟢 Connected: long-term incident memory active (host `api.hindsight.vectorize.io`, bank `chronoguard`) |
 | **Sample datasets** | [`backend/data/samples/`](backend/data/samples) (synthetic, reproducible; also downloadable in the app) |
 
-**Contents:** [Problem](#the-problem) · [Missing layer](#-the-missing-layer-in-ai-reliability) ·
-[Why different](#-why-chronoguard-is-different) · [Why Hindsight](#-why-hindsight-memory-matters) ·
+**Contents:** [Hindsight Memory Layer](#-hindsight-memory-layer) · [Demo story](#-demo-story) ·
+[Problem](#the-problem) · [Memory advantage](#-the-memory-advantage) ·
 [Learning loop](#-hindsight-learning-loop) · [Hindsight integration](#-hindsight-integration) ·
-[Demo story](#-demo-story) · [Judge demo flow](#-judge-demo-flow) · [Screenshots](#-product-screenshots) ·
-[Architecture](#architecture) · [Run locally](#run-locally) · [API](#api)
+[Screenshots](#-product-screenshots) · [Architecture](#architecture) · [Run locally](#run-locally) · [API](#api)
 
 ---
+
+## 🧠 Hindsight Memory Layer
+
+ChronoGuard uses Hindsight as its long-term memory layer. Every reliability incident becomes reusable knowledge
+that can be recalled when similar failures appear again.
+
+ChronoGuard does not forget previous ML failures. Every detected reliability incident is stored as structured
+memory:
+
+- **Failure type:** e.g. temporal leakage
+- **Dataset context:** the dataset and the model it came from
+- **Leaked feature:** the exact column
+- **Evidence timeline:** a real decision with its prediction and availability timestamps
+- **Root cause:** how late the value arrived, and why it is post-outcome information
+- **Recommended fix:** remove the feature, or use its value as known at prediction time
+- **Fix validation feedback:** how many times engineers confirmed or rejected the fix
+
+When a new model is audited, Hindsight recalls similar historical failures and helps ChronoGuard recommend
+previously successful fixes.
+
+```text
+Detect Failure
+      ↓
+Store Incident in Hindsight
+      ↓
+Recall Similar Failures
+      ↓
+Explain Risk
+      ↓
+Recommend Proven Fix
+      ↓
+Learn From Feedback
+```
+
+## 📊 Demo Story
+
+> ## “ChronoGuard has seen this failure before.”
+
+```text
+Model V1
+   ↓
+Temporal leakage detected
+   ↓
+Incident stored in Hindsight
+   ↓
+Model V2 appears with renamed columns
+   ↓
+Hindsight recalls previous incidents
+   ↓
+ChronoGuard recommends the confirmed solution
+```
+
+A second team rebuilds the fraud model's feature table and renames every leaky column (`fraud_confirmed` →
+`confirmed_fraud_flag`, `cb_resolution_flag` → `chargeback_resolution`, …). ChronoGuard still makes the
+connection through memory:
+
+> **“ChronoGuard has seen this failure before.”**
+> Model v2's audit recalls all five incidents learned from v1 (64–100% similar), each carrying the fix the team
+> confirmed, and recommends: *Remove confirmed_fraud_flag, investigation_outcome, chargeback_resolution and
+> payment_final_status before training.*
+
+| | Fraud model v1 | Fraud model v2 |
+|---|---|---|
+| Memory | Nothing similar found; 5 incidents retained | **All 5 recalled from v1**, with the confirmed fix |
+| Risk | 94 / 100 | 96 / 100 (recurring leakage) |
+| Replay | ROC-AUC 1.000 → 0.826, accuracy 99.9% → 90.3% without the leaked features: *the previous score was inflated because future information was used* | |
+
+Measured live on the bundled synthetic datasets (`fraud_model_v1.csv`: 7,200 rows; `fraud_model_v2.csv`:
+7,400 rows; generated by [`backend/scripts/generate_samples.py`](backend/scripts/generate_samples.py)).
+**Try it:** in the app's Command Center, “The story: one failure, remembered” plays these scenes one button at a
+time.
 
 ## The problem
 
@@ -45,27 +114,12 @@ Finding the leak once is not the hard part. **Organisations keep repeating it.**
 different team, or a rebuilt feature table joins the same post-outcome signal again under a new name
 (`fraud_confirmed` becomes `confirmed_fraud_flag`, `cb_resolution_flag` becomes `chargeback_resolution`).
 
-## 🚨 The Missing Layer in AI Reliability
+## 🧠 The Memory Advantage
 
-Most ML systems can detect problems.
-
-But after a problem is fixed, the knowledge disappears: it lives in a post-mortem nobody reads, a Slack
-thread, or the memory of an engineer who has moved on.
-
-The next team faces the same failure again.
-
-ChronoGuard adds a memory layer where **past failures become reusable engineering knowledge**.
-
-## ⭐ Why ChronoGuard is Different
-
-Traditional approach:
+Traditional AI reliability tools:
 
 ```text
-Detect problem
-      ↓
-Fix problem
-      ↓
-Forget
+Detect → Fix → Forget
 ```
 
 ChronoGuard:
@@ -73,65 +127,27 @@ ChronoGuard:
 ```text
 Detect
   ↓
-Remember
+Remember with Hindsight
   ↓
-Recall
+Recall previous failures
   ↓
-Explain
+Explain with evidence
   ↓
-Learn
+Recommend proven fixes
   ↓
-Prevent future failures
+Continuously improve
 ```
 
 | Step | What the agent does |
 |---|---|
 | **Detect** | Compares every feature value's availability time with its prediction time, using timestamps only (never hand-written labels), and scores the risk 0–100. |
-| **Remember** | Turns each leaked feature into a structured incident and retains it in memory. |
+| **Remember** | Turns each leaked feature into a structured incident and retains it in Hindsight. |
 | **Recall** | Before scoring the next dataset, searches memory for similar past failures, even under new column names. |
-| **Explain** | Shows the evidence (a real decision and its timestamps), replays the model with and without the leak to measure the damage, and answers questions such as “Why was this feature risky?” with citations. |
-| **Learn** | Asks “Was this fix successful?” and attaches the answer to every related incident. |
-| **Prevent** | Recommends the fix that worked last time, before the next model ships. |
+| **Explain** | Shows the evidence (a real decision and its timestamps), replays the model with and without the leak, and answers questions such as “Why was this feature risky?” with citations. |
+| **Learn** | Asks “Was this fix successful?” and attaches the answer to every related incident, so the next recommendation is better informed. |
 
 Every metric, chart, score and explanation is computed by the backend from the uploaded data; nothing is
 hard-coded.
-
-## 🧠 Why Hindsight Memory Matters
-
-Without memory:
-
-```text
-Audit → Result → Forgotten
-```
-
-With ChronoGuard:
-
-```text
-Audit
-  ↓
-Incident Memory
-  ↓
-Historical Recall
-  ↓
-Better Explanation
-  ↓
-Future Prevention
-```
-
-A stateless auditor treats every dataset as the first one it has ever seen. With memory, ChronoGuard
-remembers:
-
-- **Previous failures:** which feature leaked, in which dataset and model, and when it was learned
-- **Root causes:** how late the value arrived (leak rate, median and maximum delay) and why that is
-  post-outcome information
-- **Affected features:** the exact feature, and later features recognised as the same failure
-- **Fixes that worked:** the recommended fix, plus how many times the team confirmed or rejected it
-- **Historical evidence:** a real decision with its prediction and availability timestamps, and the replay's
-  measured impact
-
-That memory changes what the agent does next: recalled incidents raise the risk score, become the
-recommendation (“Remove confirmed_fraud_flag, investigation_outcome, chargeback_resolution and
-payment_final_status before training”), and carry the team's feedback on whether the fix worked.
 
 ## 🧠 Hindsight Learning Loop
 
@@ -189,110 +205,54 @@ How it is wired (`backend/memory/hindsight_adapter.py`, `backend/memory/incident
 |---|---|
 | `retain(bank_id, content, context, document_id, metadata, tags, update_mode="replace")` | Every incident, after each audit, replay and feedback. A stable `document_id` (`chronoguard-incident-<dataset>-<feature>`) means updates replace the memory instead of duplicating it. Metadata: `dataset`, `model`, `feature`, `leak_rate`, fix counts. Tags: `chronoguard`, `temporal-leakage`, `feature:…`, `model:…` |
 | `recall(bank_id, query)` | During each audit that finds leaks, and in memory search, to surface related organisational knowledge |
-| `reflect(bank_id, query)` | Assistant memory questions and the Memory Brain's *Reflect* box, reasoning across all incidents rather than one match at a time |
+| `reflect(bank_id, query)` | Assistant memory questions and the Hindsight Memory Brain's *Reflect* box, reasoning across all incidents rather than one match at a time |
 
 This transforms memory from simple storage into a **reliability learning loop**: the SQL store answers
 “which past feature looks like this one?”, and Hindsight adds organisational memory that can reason across
 every incident, fix and piece of feedback.
 
-**Operational behaviour.** Hindsight is enabled when `CHRONOGUARD_HINDSIGHT_BASE_URL` and
-`CHRONOGUARD_HINDSIGHT_API_KEY` are set (see [Configuration](#configuration-and-security)). Every call is
-bounded by a timeout and fails closed. Without credentials, ChronoGuard runs the same loop on its local
-incident store, and the UI shows the Hindsight status (for example *Disabled*, *Connected* or *Connection
-failed*) instead of pretending. The Hindsight client is exercised in the test suite with a fake client that
-mirrors the real SDK's call signatures.
+**In production.** Hindsight is connected at `api.hindsight.vectorize.io` with the `chronoguard` bank
+(`GET /api/hindsight/status` reports `connected`), configured through `CHRONOGUARD_HINDSIGHT_BASE_URL` and
+`CHRONOGUARD_HINDSIGHT_API_KEY` (see [Configuration](#configuration-and-security)). The sidebar shows the memory
+layer and its live status.
 
-## 📊 Demo Story
-
-The ChronoGuard demo shows how an AI reliability agent detects a failure, learns from it, and prevents
-repeated mistakes.
-
-Example workflow:
-
-```text
-Fraud Model v1
-      ↓
-Temporal leakage detected
-      ↓
-Incident stored in Hindsight
-      ↓
-New fraud dataset with renamed features
-      ↓
-Previous failure recalled
-      ↓
-Fix recommendation generated
-```
-
-The second model contains the same reliability problem with different feature names. ChronoGuard identifies
-the connection through memory.
-
-Measured on the bundled synthetic data (every number is computed live):
-
-| | Fraud model v1 | Fraud model v2 |
-|---|---|---|
-| Rows × columns | 7,200 × 32 | 7,400 × 32 |
-| Leaked features | `fraud_confirmed`, `payment_final_state`, `investigation_result`, `cb_resolution_flag` (post-outcome), `merchant_risk_score` (late in 12% of rows) | The same fields, renamed: `confirmed_fraud_flag`, `payment_final_status`, `investigation_outcome`, `chargeback_resolution`, `merchant_risk_score` |
-| Memory | Nothing similar found; 5 incidents retained | **All 5 recalled from v1 (64–100% similar)**, each with the confirmed fix |
-| Risk | 94 / 100 | 96 / 100 (recurring leakage) |
-| Replay | ROC-AUC 1.000 → 0.826, accuracy 99.9% → 90.3% without the leaked features: *the previous score was inflated because future information was used* | |
-| Recommendation | Remove the four post-outcome fields; use `merchant_risk_score` as known at prediction time | *Remove confirmed_fraud_flag, investigation_outcome, chargeback_resolution and payment_final_status before training*, citing the fix confirmed on v1 |
-
-On first start the backend also audits two synthetic history datasets (a retail forecast with future sales
-joined in, and a clean credit model), so memory starts with some experience. The data is generated by
-[`backend/scripts/generate_samples.py`](backend/scripts/generate_samples.py) (seeded, reproducible).
-Leakage verdicts are never stored in the files; ChronoGuard derives them from the timestamps.
-
-## 🎬 Judge Demo Flow
-
-About 3 minutes, from the **Command Center** (“The story: one failure, remembered”, one button per scene):
-
-1. **Upload a suspicious ML dataset:** *Audit model v1* (or drop any CSV on *Audit a dataset*).
-2. **ChronoGuard analyzes feature availability:** Audit Intelligence replays the agent's recorded steps:
-   understanding the dataset → checking temporal availability → searching previous incidents → generating the
-   recommendation → retaining lessons.
-3. **Future-information leakage is detected:** four post-outcome fields leak in 100% of decisions. Open
-   *Replay model* to see ROC-AUC fall from 1.000 to 0.826.
-4. **The incident is stored in Hindsight memory:** five structured incidents appear in **Memory Brain** and
-   **Incident Timeline**. The detail panel shows the exact record retained in Hindsight. Answer *“Was this fix
-   successful?” → Yes, it worked*.
-5. **A new dataset appears later:** *Audit model v2*, rebuilt by another team with every leaky column
-   renamed.
-6. **The agent recalls the previous failure:** *Similar incidents remembered* lists all five v1 incidents
-   with similarity and the confirmed fix.
-7. **The system recommends the proven solution:** *Remove confirmed_fraud_flag, investigation_outcome,
-   chargeback_resolution and payment_final_status before training.* Open the one-click **report** and ask
-   the assistant *“Have we seen this failure before?”*
-
-**Key moment:** *“ChronoGuard has seen this failure before.”* That sentence appears in the v2 report's
-executive summary; it is the moment the agent's memory, not a rule, catches the failure.
+**Resilience.** Every Hindsight call is bounded by a timeout and fails closed: if Hindsight is briefly
+unreachable, audits keep running on the local incident store, the UI shows *Connection failed* instead of
+pretending, and incidents are re-retained on their next update. The Hindsight client is exercised in the test
+suite with a fake client that mirrors the real SDK's call signatures.
 
 ## 📸 Product Screenshots
 
-Captured from a local run of the demo story. This environment had no Hindsight credentials, so the sidebar
-shows Hindsight as *Disabled*; the same screens show *Connected* when it is configured.
+**Production status: Hindsight Connected — Long-term incident memory active.**
+
+The screenshots below were captured from the demo story on a local development instance before its Hindsight
+key was set, so their sidebar status differs from production.
 
 ### Command Center
 
-KPIs, the neural memory view and the guided demo.
+Shows overall reliability status and the guided demo flow: models protected, incidents learned, prevented
+failures, memory confidence, and a live view of the memory.
 
 ![Command Center](docs/screenshots/command-center.png)
 
 ### Audit Intelligence
 
-Model v2: the agent's recorded reasoning and **Similar incidents remembered**, with the recommended action
-built from memory.
+Shows detection, reasoning steps and recalled incidents: model v2's leaks, the agent's recorded steps, and
+**Similar incidents remembered** turned into a recommended action.
 
 ![Audit Intelligence](docs/screenshots/audit-intelligence.png)
 
-### Memory Brain
+### 🧠 Hindsight Memory Brain
 
-Past incidents → failure patterns → new detections: v2's renamed columns linked to what was learned from v1.
+Shows how previous failures become reusable knowledge: past incidents group into failure patterns, and new
+detections link back to what was learned from model v1.
 
-![Memory Brain](docs/screenshots/memory-brain.png)
+![Hindsight Memory Brain](docs/screenshots/memory-brain.png)
 
 ### Incident Timeline
 
-How the memory grew, with one incident's cause, timeline evidence, measured impact and fix.
+Shows how reliability knowledge grows over time: incidents learned, recalls, replays and confirmed fixes, with
+one incident's cause, evidence, impact and fix.
 
 ![Incident Timeline](docs/screenshots/incident-timeline.png)
 
@@ -302,7 +262,7 @@ How the memory grew, with one incident's cause, timeline evidence, measured impa
 |---|---|
 | **Command Center** | KPIs (models protected, incidents learned, prevented failures, memory confidence), an animated neural view of the memory, and the guided 5-scene demo |
 | **Audit Intelligence** | The agent's recorded reasoning, similar incidents remembered, recommendations, the feedback prompt, and the full evidence (risk gauge, leakage timeline, delay histogram, per-feature evidence, affected decisions) |
-| **Memory Brain** | Memory graph (past incident → failure pattern → new detection), Hindsight status and reflect, memory search, every incident with its fix and fix confidence |
+| **Hindsight Memory Brain** | Memory graph (past incident → failure pattern → new detection), Hindsight status and reflect, memory search, every incident with its fix and fix confidence |
 | **Incident Timeline** | Every incident learned, recall, replay and fix confirmation, with an incident detail panel including the exact record retained in Hindsight |
 | **Model Replay** | Before vs after on a time-ordered split, with the explanation *the previous score was inflated because future information was used* |
 | **Reports** | One-click audit report: executive summary, risk score, evidence, timeline, replay, memory references, recommended fixes. Download as Markdown or print to PDF |
@@ -313,6 +273,10 @@ failures* = leaked features whose recommended fix the team confirmed; *memory co
 (fix reports + 2), shown as “—” until there is feedback.
 
 ## Architecture
+
+![ChronoGuard architecture: dataset, temporal leakage detection, risk assessment, incident memory, Hindsight recall, explanation and future prevention, with fix feedback flowing back into memory](docs/architecture.png)
+
+Component view:
 
 ```mermaid
 flowchart LR
@@ -356,7 +320,7 @@ Backend layout: `api/routers/` (one module per area), `engine/` (parse, detect, 
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, Framer Motion, Recharts, TanStack Query, React Router |
 | Backend | Python 3.11, FastAPI, Pydantic, SQLAlchemy 2 |
 | Analysis | pandas, NumPy, scikit-learn (`HistGradientBoostingClassifier`, hashed text vectors) |
-| Memory | Incident store in SQL with vector search; optional Hindsight (`hindsight-client`); optional Azure OpenAI embeddings |
+| Memory | Hindsight long-term memory (`hindsight-client`) + local incident store in SQL with vector search; optional Azure OpenAI embeddings |
 | Storage | SQLite (default) or PostgreSQL |
 | Quality | pytest, ruff, TypeScript strict build, oxlint |
 
@@ -467,19 +431,20 @@ Single-page-app rewrites are included for Vercel (`vercel.json`), Netlify (`publ
 - The demo has **no authentication**: anyone with the URL can upload and see audits. Do not upload
   confidential data to a public deployment.
 
-**Optional integrations:**
+**Integrations:**
 
-| Integration | Enables | Settings |
+| Integration | Role | Settings |
 |---|---|---|
-| Azure OpenAI | Semantic embeddings for memory; written explanations grounded in measured facts | `CHRONOGUARD_AZURE_OPENAI_*` |
-| Hindsight | Long-term organizational recall alongside the SQL incident store | `CHRONOGUARD_HINDSIGHT_BASE_URL` (e.g. `https://api.hindsight.vectorize.io`) + `CHRONOGUARD_HINDSIGHT_API_KEY` |
-| PostgreSQL | Durable, shared storage | `CHRONOGUARD_DATABASE_URL` + `pip install "psycopg[binary]"` |
+| Hindsight | **Long-term memory layer**: incidents are retained, recalled and reflected on across audits | `CHRONOGUARD_HINDSIGHT_BASE_URL` (`https://api.hindsight.vectorize.io`) + `CHRONOGUARD_HINDSIGHT_API_KEY` (+ `CHRONOGUARD_HINDSIGHT_BANK_ID`, default `chronoguard`) |
+| Azure OpenAI (optional) | Semantic embeddings for the local incident store; written explanations grounded in measured facts | `CHRONOGUARD_AZURE_OPENAI_*` |
+| PostgreSQL (optional) | Durable, shared storage | `CHRONOGUARD_DATABASE_URL` + `pip install "psycopg[binary]"` |
 
 The active providers are shown in the app's sidebar and at `GET /api/health`. For Hindsight, health reports
 `disabled` (not configured), `package_missing`, `configured` (connection not checked yet), `connected` or
 `connection_failed`, with a reason in `hindsight_detail`. The check is a cached background probe (at most once
 a minute, 3 s timeout), so the health endpoint stays fast. Every Hindsight call is bounded by
-`CHRONOGUARD_HINDSIGHT_TIMEOUT_SECONDS` (default 10) and fails closed: audits and local memory keep working.
+`CHRONOGUARD_HINDSIGHT_TIMEOUT_SECONDS` (default 10) and fails closed: audits and the local incident store keep
+working. For local development without a Hindsight key, the same loop runs on the local incident store alone.
 
 ## Dataset format
 
