@@ -43,10 +43,17 @@ export const fmtBytes = (n: number) =>
 
 export const providerLabel = (p: string) =>
   ({
-    'local-vectors': 'Local vector memory',
+    'local-vectors': 'Local incident memory',
     'azure-openai': 'Azure OpenAI',
     template: 'Evidence template',
   })[p] ?? p
+
+/** Hindsight is the memory layer whenever it is configured; without credentials the local incident store serves alone. */
+export const hindsightIsMemoryLayer = (status: string | undefined) =>
+  status === 'connected' || status === 'configured' || status === 'connection_failed'
+
+export const memoryLayerLabel = (status: string | undefined) =>
+  hindsightIsMemoryLayer(status) ? 'Hindsight Long-Term Memory' : 'Local incident memory'
 
 export const hindsightLabel = (status: string) =>
   ({

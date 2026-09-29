@@ -8,7 +8,7 @@ import { MemoryGraphView } from '../components/MemoryGraphView'
 import { EventList } from '../components/EventList'
 import { EmptyState, ErrorState, GlassCard, PageHeader, PageSkeleton, Pill, SectionTitle, Skeleton } from '../components/ui'
 import { useHealth, useHindsightReflect, useHindsightStatus, useIncidents, useMemoryGraph, useMemoryTimeline, useSearch } from '../hooks/useApi'
-import { fmtDate, fmtDuration, fmtInt, fmtPct, hindsightLabel, providerLabel } from '../lib/format'
+import { fmtDate, fmtDuration, fmtInt, fmtPct, hindsightIsMemoryLayer, hindsightLabel, providerLabel } from '../lib/format'
 
 function HindsightCard() {
   const status = useHindsightStatus()
@@ -21,7 +21,7 @@ function HindsightCard() {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Cloud className="size-4 text-memory" aria-hidden /> Hindsight long-term memory
+            <Cloud className="size-4 text-memory" aria-hidden /> Hindsight long-term memory layer
           </h2>
           <p className="mt-1 text-xs text-muted">
             Every incident is retained as a structured record (cause, timeline evidence, fix, impact, feedback). Audits recall from
@@ -106,20 +106,27 @@ export function Memory() {
   return (
     <>
       <PageHeader
-        eyebrow="Memory Brain"
+        eyebrow="🧠 Hindsight Memory Brain"
         title={
           <>
             Every ML failure, <span className="text-memory-gradient">remembered.</span>
           </>
         }
-        subtitle="Each leaked feature becomes a structured incident. Incidents that look like the same failure form a pattern; when a new dataset matches a pattern, memory fires before the model ships. Fix feedback flows back into every incident it touched."
-        actions={health.data && <Pill>Vectors: {providerLabel(health.data.embedding_provider)}</Pill>}
+        subtitle="ChronoGuard uses Hindsight as its long-term memory layer. Each leaked feature becomes a structured incident retained in Hindsight; incidents that look like the same failure form a pattern, and when a new dataset matches one, memory fires before the model ships. Fix feedback flows back into every incident it touched."
+        actions={
+          health.data && (
+            <Pill>
+              {providerLabel(health.data.embedding_provider)}
+              {hindsightIsMemoryLayer(health.data.hindsight) && ' + Hindsight long-term memory'}
+            </Pill>
+          )
+        }
       />
 
       <GlassCard className="mb-4">
         <SectionTitle hint="Hover to trace a pattern · click an incident or detection to open it">
           <span className="flex items-center gap-2">
-            <Network className="size-4 text-accent" aria-hidden /> Memory graph
+            <Network className="size-4 text-accent" aria-hidden /> Incident memory graph
           </span>
         </SectionTitle>
         {graph.isLoading && <Skeleton className="h-72" />}
@@ -155,7 +162,7 @@ export function Memory() {
       </div>
 
       <GlassCard>
-        <SectionTitle hint="Try a column name you are about to use">Ask memory about a feature</SectionTitle>
+        <SectionTitle hint="Try a column name you are about to use">Ask Hindsight Memory about a feature</SectionTitle>
         <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
           <label className="sr-only" htmlFor="memory-query">
             Feature name or description

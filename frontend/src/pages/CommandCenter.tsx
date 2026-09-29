@@ -122,7 +122,7 @@ export function CommandCenter() {
         </h1>
         <p className="mt-3 max-w-3xl text-sm text-muted sm:text-base">
           ChronoGuard audits training data for information from the future, measures how much it inflated the model, and retains every
-          incident in long-term memory, so when the same failure returns under a new name, it is recognised before the model ships.
+          incident in Hindsight long-term memory, so when the same failure returns under a new name, it is recognised before the model ships.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <a href="#demo" className="btn btn-primary">
@@ -174,11 +174,11 @@ export function CommandCenter() {
           <SectionTitle
             hint={
               <Link to="/memory" className="inline-flex items-center gap-1 text-accent hover:underline">
-                Memory Brain <ArrowRight className="size-3" aria-hidden />
+                Hindsight Memory <ArrowRight className="size-3" aria-hidden />
               </Link>
             }
           >
-            Neural memory
+            🧠 Hindsight Memory network
           </SectionTitle>
           {graph.data ? <NeuralMemory graph={graph.data} /> : <Skeleton className="h-[340px]" />}
         </GlassCard>

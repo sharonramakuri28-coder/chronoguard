@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Brain, FileText, FlaskConical, History, LayoutDashboard, Menu, ScanSearch, X } from 'lucide-react'
 import { Suspense, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { hindsightLabel, providerLabel } from '../lib/format'
+import { hindsightLabel, memoryLayerLabel, providerLabel } from '../lib/format'
 import { useHealth } from '../hooks/useApi'
 import { ChatDrawer } from './ChatDrawer'
 import { Logo } from './Logo'
@@ -12,7 +12,7 @@ import { PageSkeleton } from './ui'
 const NAV = [
   { to: '/', label: 'Command Center', icon: LayoutDashboard },
   { to: '/audits', label: 'Audit Intelligence', icon: ScanSearch },
-  { to: '/memory', label: 'Memory Brain', icon: Brain },
+  { to: '/memory', label: 'Hindsight Memory', icon: Brain },
   { to: '/timeline', label: 'Incident Timeline', icon: History },
   { to: '/replay', label: 'Model Replay', icon: FlaskConical },
   { to: '/reports', label: 'Reports', icon: FileText },
@@ -42,17 +42,24 @@ function SystemStatus() {
         <dl className="space-y-1 text-muted">
           <div className="flex justify-between gap-2">
             <dt>Memory</dt>
-            <dd className="text-slate-300">{providerLabel(data.embedding_provider)}</dd>
+            <dd className="text-right text-slate-300">{memoryLayerLabel(data.hindsight)}</dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt>Status</dt>
+            <dd className="flex items-center gap-1.5 text-right text-slate-300" title={data.hindsight_detail ?? undefined}>
+              <StatusDot
+                ok={data.hindsight === 'connected' ? true : data.hindsight === 'connection_failed' ? false : undefined}
+              />
+              {hindsightLabel(data.hindsight)}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-2">
+            <dt>Incident store</dt>
+            <dd className="text-right text-slate-300">{providerLabel(data.embedding_provider)}</dd>
           </div>
           <div className="flex justify-between gap-2">
             <dt>Explanations</dt>
-            <dd className="text-slate-300">{providerLabel(data.explanation_provider)}</dd>
-          </div>
-          <div className="flex justify-between gap-2">
-            <dt>Hindsight</dt>
-            <dd className="text-right text-slate-300" title={data.hindsight_detail ?? undefined}>
-              {hindsightLabel(data.hindsight)}
-            </dd>
+            <dd className="text-right text-slate-300">{providerLabel(data.explanation_provider)}</dd>
           </div>
         </dl>
       )}

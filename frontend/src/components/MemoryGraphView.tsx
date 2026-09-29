@@ -71,7 +71,6 @@ export function MemoryGraphView({ graph }: { graph: MemoryGraph }) {
               stroke={e.kind === 'recalled_by' ? COLOR.detection : COLOR.incident}
               strokeWidth={e.kind === 'recalled_by' ? 1.6 + (e.similarity ?? 0) : 1}
               strokeOpacity={dim ? 0.08 : e.kind === 'recalled_by' ? 0.75 : 0.4}
-              className={e.kind === 'recalled_by' && !reduce ? 'neural-flow' : ''}
               initial={reduce ? false : { pathLength: 0 }}
               animate={{ pathLength: 1 }}
               transition={{ duration: 0.8, delay: reduce ? 0 : 0.01 * i }}
